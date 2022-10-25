@@ -26,8 +26,8 @@ class MovieLensMR:
         self.data_path = data_path
         self.check()
         self.idx_to_uri = self.create_mapping()
-        self.create_intersection()
-        self.create_union()
+        # self.create_intersection()
+        # self.create_union()
 
     def check(self):
         """
@@ -108,26 +108,34 @@ class MovieLensMR:
 
             # for remaining unmatched movies, I use fuzzy methods since the titles have some marginal differences
             no_matched_ml_big = set(ml_title_to_idx.keys()) - set(matched)
+            matched_titles = {"ml-100k": [], "ml-latest": []}
+            titles_no_year = []
 
             for movie_100 in no_matched_100k:
+                if movie_100 in titles_no_year:
+                    continue
+                try:
+                    f_year = int(movie_100[1].strip()[-6:][1:5])
+                except ValueError:
+                    # save ml movies without year info
+                    titles_no_year.append(movie_100)
+                    continue
                 best_sim = 0.0
                 candidate_title_100 = ""
                 candidate_title = ""
                 candidate_idx = -1
                 for movie in no_matched_ml_big:
-                    title_sim = fuzz.token_set_ratio(movie_100[1][:-6], movie[:-6])
-                    # the year could be slightly different between the two datasets - for this reason I use the
-                    # difference of the years
+                    if movie in titles_no_year:
+                        continue
                     try:
-                        # in some cases there is not year -> we skip those cases - they are cases in which the cast is
-                        # not possible
-                        f_year = int(movie_100[1].strip()[-6:][1:5])
                         s_year = int(movie.strip()[-6:][1:5])
                     except ValueError:
-                        print("Year information missing for %s or %s" % (movie_100, movie))
+                        # save ml latest movies without year info
+                        titles_no_year.append(movie)
                         continue
+                    title_sim = fuzz.token_set_ratio(movie_100[1][:-6], movie[:-6])
                     if title_sim > best_sim and movie_100[1] not in matched and movie not in matched \
-                            and abs(f_year - s_year) <= 1:
+                            and f_year == s_year:  # abs(f_year - s_year) <= 1:
                         best_sim = title_sim
                         candidate_idx = movie_100[0]
                         candidate_title_100 = movie_100[1]
@@ -136,8 +144,13 @@ class MovieLensMR:
                     # it seems that under 96 there are typos in the names and the matches are not reliable
                     # add movie to the dict containing the matches
                     ml_100_idx_to_imdb[candidate_idx] = ml_idx_to_link[ml_title_to_idx[candidate_title]]
+                    matched_titles["ml-100k"].append(candidate_title_100)
+                    matched_titles["ml-latest"].append(candidate_title)
                     matched.append(candidate_title_100)
                     matched.append(candidate_title)
+
+            matched_titles = pd.DataFrame.from_dict(matched_titles)
+            matched_titles.to_csv("./datasets/fuzzy_mathes.csv", index=False)
 
             # now, we need to fetch the wikidata URIs for the movies we have matched between MovieLens-100k and
             # MovieLens-latest-small
