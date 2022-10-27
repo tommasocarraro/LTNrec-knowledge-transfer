@@ -7,7 +7,25 @@ import sys
 import string
 import unidecode
 from fuzzywuzzy import fuzz
+from collections import Counter
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
+
+
+def send_query(query):
+    """
+    It sends a sparql query to the Wikidata ontology and returns the result.
+    """
+    endpoint_url = 'https://query.wikidata.org/sparql'
+    user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 12_6) AppleWebKit/537.36 (KHTML, like Gecko) ' \
+                 'Chrome/106.0.0.0 Safari/537.36'
+    sparql = SPARQLWrapper(endpoint_url)
+    sparql.addCustomHttpHeader('User-Agent', user_agent)
+    sparql.addCustomHttpHeader('Retry-After', '2')
+    sparql.setQuery(query)
+    sparql.setReturnFormat(JSON)
+    sparql.setMethod(POST)
+    result = sparql.query().convert()['results']['bindings']
+    return result
 
 
 class MovieLensMR:
@@ -25,6 +43,10 @@ class MovieLensMR:
     def __init__(self, data_path):
         self.data_path = data_path
         self.check()
+        if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/entities.csv")):
+            self.fix_mr()
+        if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/u.data")):
+            self.fix_ml_100k()
         self.idx_to_uri = self.create_mapping()
         # self.create_intersection()
         # self.create_union()
@@ -60,6 +82,95 @@ class MovieLensMR:
                                                                                           "movielens " \
                                                                                           "latest is missing"
 
+    def fix_ml_100k(self):
+        """
+        It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
+        has rated multiple times the same movie.
+        It creates new csv files without the duplicates, both u.data and u.item.
+        """
+        # get MovieLens-100k movies
+        ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
+                                         encoding="iso-8859-1", header=None)
+        ml_100_movies_file_dict = ml_100_movies_file.to_dict("records")
+
+        # for each title, we get the list of corresponding indexes
+        ml_100_title_to_idx = {}
+        for movie in ml_100_movies_file_dict:
+            if movie[1] not in ml_100_title_to_idx:
+                ml_100_title_to_idx[movie[1]] = [movie[0]]
+            else:
+                ml_100_title_to_idx[movie[1]].append(movie[0])
+
+        # get movies with multiple indexes
+        duplicates = {movie: idx for movie, idx in ml_100_title_to_idx.items() if len(idx) > 1}
+        # create new ratings and movie files with new indexes
+        ml_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.data"), sep="\t", header=None)
+        new_ratings = []
+        for movie, idx in duplicates.items():
+            # create one unique index for the same movie with two different indexes
+            # we keep the first of the two indexes
+            ml_ratings[1] = ml_ratings[1].replace(idx[1], idx[0])
+            # delete record with second occurrence of the movie in the file containing movie information
+            ml_100_movies_file = ml_100_movies_file[ml_100_movies_file[0] != idx[1]]
+            # aggregate ratings of users (we need to do that because now we have a user giving multiple
+            # ratings to the same index)
+            groups = ml_ratings.groupby(by=[0, 1])
+            for i, (_, group) in enumerate(groups):
+                if len(group) > 1:
+                    # compute mean of the ratings
+                    group[2] = group[2].mean()
+                    # append new record to dataset
+                    new_ratings.append(group.head(1))
+                    # remove old records from dataset
+                    ml_ratings = ml_ratings.drop(group.index)
+        new_ratings = pd.concat(new_ratings)
+        ml_ratings = ml_ratings.append(new_ratings)
+        ml_ratings.reset_index()
+        ml_100_movies_file.reset_index()
+        # create new files
+        ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
+        ml_100_movies_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
+                                  encoding="iso-8859-1", index=False, header=None)
+
+    def fix_mr(self):
+        """
+        It fixes the MindReader dataset by removing duplicated titles. There could be cases in which the title is the
+        same even if the movie is slightly different, for example from a different year.
+
+        To remove duplicates, we add the publication date to the title of the movie in brackets, as for the MovieLens
+        datasets.
+        """
+        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
+        mr_entities_dict = mr_entities.to_dict("records")
+        mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities_dict
+                           if "Movie" in entity["labels"]}
+
+        # get release dates of movies in MindReader
+        query = "SELECT ?film ?publicationDate WHERE { ?film wdt:P577 ?publicationDate. VALUES ?film {" + \
+                ' '.join(["wd:" + uri.split("/")[-1] for uri in mr_uri_to_title]) + \
+                "} SERVICE wikibase:label { bd:serviceParam wikibase:language '[AUTO_LANGUAGE],en'. } }"
+
+        result = send_query(query)
+
+        mr_uri_to_date = {}
+        for match in result:
+            uri = match['film']['value']
+            date = match['publicationDate']['value'].split("-")[0]
+            if uri not in mr_uri_to_date:
+                # we take only the first date for each movie, some movies have multiple publication dates
+                mr_uri_to_date[uri] = date
+
+        # put date on the title when it is available
+        mr_uri_to_title = {uri: "%s (%d)" % (title, int(mr_uri_to_date[uri]))
+                           if uri in mr_uri_to_date else title for uri, title in mr_uri_to_title.items()}
+
+        # recreate "name" column of original dataframe - the new column has now dates on the titles when they are
+        # available
+        mr_entities["name"] = [mr_uri_to_title[entity["uri"]]
+                               if "Movie" in entity["labels"] else entity["name"] for entity in mr_entities_dict]
+
+        mr_entities.to_csv(os.path.join(self.data_path, "mindreader/processed/entities.csv"), index=False)
+
     def create_mapping(self):
         """
         It creates the mapping between the indexes of MovieLens-100k and the URIs of MindReader.
@@ -67,7 +178,7 @@ class MovieLensMR:
         tries to use fuzzy methods to check the similarity between the titles.
 
         The process is summarized as follows:
-        1. the titles and years of MovieLens-100k are matched with titles and years of MovieLens-latest-smarll. This
+        1. the titles and years of MovieLens-100k are matched with titles and years of MovieLens-latest-small. This
         is done because the latter dataset has updated links to iMDB entities;
         2. The iMDB ids are given as input to a sparql query that retrieves the corresponding wikidata URIs;
         3. the match between MovieLens-100k idx and wikidata URIs contained in MindReader is created.
@@ -75,82 +186,83 @@ class MovieLensMR:
         Returns a dictionary containing this mapping, namely ml_idx -> mr_uri.
         """
         if os.path.exists("./datasets/mapping.csv"):
-            ml_100_idx_to_wikidata = pd.read_csv("./datasets/mapping.csv").to_dict("records")
-            ml_100_idx_to_wikidata = {mapping["idx"]: mapping["uri"] for mapping in ml_100_idx_to_wikidata}
+            ml_100_idx_to_mr_uri = pd.read_csv("./datasets/mapping.csv").to_dict("records")
+            ml_100_idx_to_mr_uri = {mapping["idx"]: mapping["uri"] for mapping in ml_100_idx_to_mr_uri}
         else:
-            # create index to link dict
+            # create index to iMDB link dict
             ml_link_file = pd.read_csv(os.path.join(self.data_path, "ml-latest-small/links.csv"), dtype=str)
             ml_link_file["movieId"] = ml_link_file["movieId"].astype(np.int64)
             ml_link_file = ml_link_file.to_dict("records")
             ml_idx_to_link = {link["movieId"]: "tt" + link["imdbId"] for link in ml_link_file}
 
             # create title to idx dict
-            # note that there are to "Emma" in MovieLens, but only one is in MindReader. Other Emma has been canceled
+            # note that there are two "Emma" in MovieLens-latest, but only one is in MindReader. Other Emma has
+            # been manually canceled
             ml_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-latest-small/movies.csv")).to_dict("records")
             ml_title_to_idx = {movie["title"]: movie["movieId"] for movie in ml_movies_file}
+            # ml_idx_to_title = {idx: title for title, idx in ml_title_to_idx.items()}
 
             # get imdb id for movies in MovieLens-100k
-            ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
+            ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
                                              encoding="iso-8859-1", header=None).to_dict("records")
+            ml_100_title_to_idx = {movie[1]: movie[0] for movie in ml_100_movies_file}
+            # ml_100_idx_to_title = {idx: title for title, idx in ml_100_title_to_idx.items()}
+
             # match titles between MovieLens-100k and MovieLens-latest movies to get imdb id of MovieLens-100k movies
-            no_matched_100k = []
-            matched = []
             ml_100_idx_to_imdb = {}
-            for movie in ml_100_movies_file:
-                if movie[1] in ml_title_to_idx:  # if title of 100k is in latest dataset
-                    # here, there could be multiple 100k ids pointing the same imdb id
-                    # this is ok because movielens-100k has multiple ids for the same movie - this happens if
-                    # the same user gives different ratings for the same movie
-                    matched.append(movie[1])
-                    ml_100_idx_to_imdb[movie[0]] = ml_idx_to_link[ml_title_to_idx[movie[1]]]
-                else:
-                    no_matched_100k.append(movie)
+            matched = []
+            for title, idx in ml_100_title_to_idx.items():
+                if title in ml_title_to_idx:
+                    # if title of 100k is in latest dataset, get its link
+                    ml_100_idx_to_imdb[idx] = ml_idx_to_link[ml_title_to_idx[title]]
+                    matched.append(title)
 
             # for remaining unmatched movies, I use fuzzy methods since the titles have some marginal differences
-            no_matched_ml_big = set(ml_title_to_idx.keys()) - set(matched)
-            matched_titles = {"ml-100k": [], "ml-latest": []}
-            titles_no_year = []
+            no_matched_100k = set(ml_100_title_to_idx.keys()) - set(matched)
+            no_matched_ml = set(ml_title_to_idx.keys()) - set(matched)
 
-            for movie_100 in no_matched_100k:
-                if movie_100 in titles_no_year:
+            titles_without_year = []
+
+            for title_100 in no_matched_100k:
+                if title_100 in titles_without_year:
                     continue
                 try:
-                    f_year = int(movie_100[1].strip()[-6:][1:5])
+                    # get year of ml-100k movie
+                    f_year = int(title_100.strip()[-6:][1:5])
                 except ValueError:
                     # save ml movies without year info
-                    titles_no_year.append(movie_100)
+                    titles_without_year.append(title_100)
                     continue
                 best_sim = 0.0
                 candidate_title_100 = ""
                 candidate_title = ""
-                candidate_idx = -1
-                for movie in no_matched_ml_big:
-                    if movie in titles_no_year:
+                for title in no_matched_ml:
+                    if title in titles_without_year:
                         continue
                     try:
-                        s_year = int(movie.strip()[-6:][1:5])
+                        # get year of ml-latest movie
+                        s_year = int(title.strip()[-6:][1:5])
                     except ValueError:
                         # save ml latest movies without year info
-                        titles_no_year.append(movie)
+                        titles_without_year.append(title)
                         continue
-                    title_sim = fuzz.token_set_ratio(movie_100[1][:-6], movie[:-6])
-                    if title_sim > best_sim and movie_100[1] not in matched and movie not in matched \
+                    # compute similarity between titles with year removed
+                    title_sim = fuzz.token_set_ratio(title_100[:-6], title[:-6])
+                    # search for best similarity between titles
+                    if title_sim > best_sim and title_100 not in matched and title not in matched \
                             and f_year == s_year:  # abs(f_year - s_year) <= 1:
                         best_sim = title_sim
-                        candidate_idx = movie_100[0]
-                        candidate_title_100 = movie_100[1]
-                        candidate_title = movie
+                        candidate_title_100 = title_100
+                        candidate_title = title
                 if best_sim >= 96:
                     # it seems that under 96 there are typos in the names and the matches are not reliable
                     # add movie to the dict containing the matches
-                    ml_100_idx_to_imdb[candidate_idx] = ml_idx_to_link[ml_title_to_idx[candidate_title]]
-                    matched_titles["ml-100k"].append(candidate_title_100)
-                    matched_titles["ml-latest"].append(candidate_title)
+                    ml_100_idx_to_imdb[ml_100_title_to_idx[candidate_title_100]] = \
+                        ml_idx_to_link[ml_title_to_idx[candidate_title]]
                     matched.append(candidate_title_100)
                     matched.append(candidate_title)
 
-            matched_titles = pd.DataFrame.from_dict(matched_titles)
-            matched_titles.to_csv("./datasets/fuzzy_mathes.csv", index=False)
+            no_matched_100k = set(no_matched_100k) - set(matched)
 
             # now, we need to fetch the wikidata URIs for the movies we have matched between MovieLens-100k and
             # MovieLens-latest-small
@@ -159,27 +271,63 @@ class MovieLensMR:
                     ' '.join(["'" + imdb_url + "'" for idx, imdb_url in ml_100_idx_to_imdb.items()]) + \
                     "} SERVICE wikibase:label { bd:serviceParam wikibase:language '[AUTO_LANGUAGE],en'. } }"
 
-            endpoint_url = 'https://query.wikidata.org/sparql'
-            user_agent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 12_6) AppleWebKit/537.36 (KHTML, like Gecko) ' \
-                         'Chrome/106.0.0.0 Safari/537.36'
-
-            sparql = SPARQLWrapper(endpoint_url)
-            sparql.addCustomHttpHeader('User-Agent', user_agent)
-            sparql.addCustomHttpHeader('Retry-After', '2')
-            sparql.setQuery(query)
-            sparql.setReturnFormat(JSON)
-            sparql.setMethod(POST)
-            result = sparql.query().convert()['results']['bindings']
+            result = send_query(query)
 
             imdb_to_wikidata = {match['label']['value']: match['film']['value'] for match in result}
 
             ml_100_idx_to_wikidata = {idx: imdb_to_wikidata[imdb_id] for idx, imdb_id in ml_100_idx_to_imdb.items()
                                       if imdb_id in imdb_to_wikidata}
-            mapping = pd.DataFrame.from_dict({"idx": list(ml_100_idx_to_wikidata.keys()),
-                                              "uri": list(ml_100_idx_to_wikidata.values())})
+
+            # filter mapping based on presence of movie in MindReader
+            mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv")).to_dict("records")
+            mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
+            mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities if "Movie" in entity["labels"]}
+            mr_title_to_uri = {title: uri for uri, title in mr_uri_to_title.items()}
+            print(len(mr_uri_to_title))
+            print(len(mr_title_to_uri))
+            mr_movie_decade = {triple["head_uri"]: int(triple["tail_uri"].split("-")[1]) for triple in mr_triples
+                               if triple["relation"] == "FROM_DECADE"
+                               if triple["head_uri"] in mr_uri_to_title}
+            ml_100_idx_to_mr_uri = {idx: uri for idx, uri in ml_100_idx_to_wikidata.items()
+                                    if uri in mr_uri_to_title}
+            no_matched_mr = set(mr_uri_to_title.keys()) - set(ml_100_idx_to_mr_uri.values())
+
+            # repeat fuzzy procedure between MovieLens-100k and MindReader
+
+            for title_100 in no_matched_100k:
+                try:
+                    f_year = int(title_100.strip()[-6:][1:5])
+                except ValueError:
+                    continue
+                best_sim = 0.0
+                candidate_title_100 = ""
+                candidate_mr_title = ""
+                for uri in no_matched_mr:
+                    # compute similarity between titles with year removed
+                    title_sim = fuzz.token_set_ratio(title_100[:-6], mr_uri_to_title[uri])
+                    # search for best similarity between titles
+                    if title_sim > best_sim and title_100 not in matched and mr_uri_to_title[uri] not in matched \
+                            and (mr_movie_decade[uri] <= f_year < mr_movie_decade[uri] + 10):
+                        best_sim = title_sim
+                        candidate_title_100 = title_100
+                        candidate_mr_title = mr_uri_to_title[uri]
+                if best_sim >= 96:
+                    mr_year = mr_movie_decade[mr_title_to_uri[candidate_mr_title]]
+                    answer = ""
+                    while answer not in ("Y", "N"):
+                        answer = input("World you like to match %s with %s (%s) (Y/N)" % (candidate_title_100,
+                                                                                            candidate_mr_title,
+                                                                                            str(mr_year) + "-" + str(mr_year + 10)))
+                    if answer == "Y":
+                        ml_100_idx_to_mr_uri[ml_100_title_to_idx[candidate_title_100]] = mr_title_to_uri[candidate_mr_title]
+                        matched.append(candidate_title_100)
+                        matched.append(candidate_mr_title)
+
+            mapping = pd.DataFrame.from_dict({"idx": list(ml_100_idx_to_mr_uri.keys()),
+                                              "uri": list(ml_100_idx_to_mr_uri.values())})
             mapping.to_csv("./datasets/mapping.csv", index=False)
 
-        return ml_100_idx_to_wikidata
+        return ml_100_idx_to_mr_uri
 
     def create_intersection(self):
         """
