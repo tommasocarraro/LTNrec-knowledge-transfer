@@ -48,7 +48,7 @@ class MovieLensMR:
         if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/u.data")):
             self.fix_ml_100k()
         self.idx_to_uri = self.create_mapping()
-        # self.create_intersection()
+        self.create_intersection()
         # self.create_union()
 
     def check(self):
@@ -58,11 +58,10 @@ class MovieLensMR:
         2. ratings: contains the user-entity ratings of the MindReader dataset;
         3. triples: contains the relationships between the entities of the MindReader KG. For example, who is the actor
         of the movie? Which is the genre? Which is the year? All this information is included in the triples file;
-        4. u.data (movielens small): contains the user-item ratings of the MovieLens-100k dataset;
-        5. u.item (movielens small): contains the content information of the movies in MovieLens-100k;
-        6. ratings (movielens big): contains the user-item ratings of the MovieLens latest dataset;
-        7. movies (movielens big): contains the content information of the movies in the MovieLens latest dataset;
-        8. links (movielens big): contains the links to iMDB for the movies in the dataset
+        4. u.data (MovieLens-100k): contains the user-item ratings of the MovieLens-100k dataset;
+        5. u.item (MovieLens-100k): contains the content information of the movies in MovieLens-100k;
+        6. movies (MovieLens-latest): contains the content information of the movies in the MovieLens latest dataset;
+        7. links (MovieLens-latest): contains the links to iMDB for the movies in the dataset.
         """
         assert os.path.exists(os.path.join(self.data_path, 'mindreader/entities.csv')), "entities.csv for MindReader " \
                                                                                         "is missing"
@@ -72,9 +71,6 @@ class MovieLensMR:
                                                                                        "is missing"
         assert os.path.exists(os.path.join(self.data_path, 'ml-100k/u.data')), "u.data for ml-100k is missing"
         assert os.path.exists(os.path.join(self.data_path, 'ml-100k/u.item')), "u.item for ml-100k is missing"
-        assert os.path.exists(os.path.join(self.data_path, 'ml-latest-small/ratings.csv')), "ratings.csv for " \
-                                                                                            "movielens " \
-                                                                                            "latest is missing"
         assert os.path.exists(os.path.join(self.data_path, 'ml-latest-small/movies.csv')), "movies.csv for " \
                                                                                            "movielens " \
                                                                                            "latest is missing"
@@ -174,14 +170,15 @@ class MovieLensMR:
     def create_mapping(self):
         """
         It creates the mapping between the indexes of MovieLens-100k and the URIs of MindReader.
-        For doing that, it matches titles and years of the movies. In the cases in which there is not a match, it
-        tries to use fuzzy methods to check the similarity between the titles.
+        For doing that, it matches titles and years of the movies. In the cases in which there is not a perfect match
+        (==), it tries to use fuzzy methods to check the similarity (~=) between the titles.
 
         The process is summarized as follows:
         1. the titles and years of MovieLens-100k are matched with titles and years of MovieLens-latest-small. This
         is done because the latter dataset has updated links to iMDB entities;
-        2. The iMDB ids are given as input to a sparql query that retrieves the corresponding wikidata URIs;
-        3. the match between MovieLens-100k idx and wikidata URIs contained in MindReader is created.
+        2. the iMDB ids are given as input to a sparql query that retrieves the corresponding wikidata URIs;
+        3. the match between MovieLens-100k idx and wikidata URIs contained in MindReader is created;
+        4. it repeats the same procedure between titles and years of unmatched MovieLens-100k and MindReader movies.
 
         Returns a dictionary containing this mapping, namely ml_idx -> mr_uri.
         """
@@ -200,57 +197,47 @@ class MovieLensMR:
             # been manually canceled
             ml_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-latest-small/movies.csv")).to_dict("records")
             ml_title_to_idx = {movie["title"]: movie["movieId"] for movie in ml_movies_file}
-            # ml_idx_to_title = {idx: title for title, idx in ml_title_to_idx.items()}
 
             # get imdb id for movies in MovieLens-100k
             ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
                                              encoding="iso-8859-1", header=None).to_dict("records")
             ml_100_title_to_idx = {movie[1]: movie[0] for movie in ml_100_movies_file}
-            # ml_100_idx_to_title = {idx: title for title, idx in ml_100_title_to_idx.items()}
+            ml_100_idx_to_title = {idx: title for title, idx in ml_100_title_to_idx.items()}
 
             # match titles between MovieLens-100k and MovieLens-latest movies to get imdb id of MovieLens-100k movies
             ml_100_idx_to_imdb = {}
             matched = []
             for title, idx in ml_100_title_to_idx.items():
                 if title in ml_title_to_idx:
-                    # if title of 100k is in latest dataset, get its link
+                    # if title of 100k is in ml-latest dataset, get its link
                     ml_100_idx_to_imdb[idx] = ml_idx_to_link[ml_title_to_idx[title]]
                     matched.append(title)
 
             # for remaining unmatched movies, I use fuzzy methods since the titles have some marginal differences
+            # (e.g., date, order of words)
             no_matched_100k = set(ml_100_title_to_idx.keys()) - set(matched)
             no_matched_ml = set(ml_title_to_idx.keys()) - set(matched)
 
-            titles_without_year = []
-
             for title_100 in no_matched_100k:
-                if title_100 in titles_without_year:
-                    continue
                 try:
                     # get year of ml-100k movie
                     f_year = int(title_100.strip()[-6:][1:5])
                 except ValueError:
-                    # save ml movies without year info
-                    titles_without_year.append(title_100)
+                    # if there is no year info, we do not find matches
                     continue
                 best_sim = 0.0
                 candidate_title_100 = ""
                 candidate_title = ""
                 for title in no_matched_ml:
-                    if title in titles_without_year:
-                        continue
                     try:
                         # get year of ml-latest movie
                         s_year = int(title.strip()[-6:][1:5])
                     except ValueError:
-                        # save ml latest movies without year info
-                        titles_without_year.append(title)
                         continue
                     # compute similarity between titles with year removed
-                    title_sim = fuzz.token_set_ratio(title_100[:-6], title[:-6])
+                    title_sim = fuzz.token_set_ratio(title_100.strip()[:-6], title.strip()[:-6])
                     # search for best similarity between titles
-                    if title_sim > best_sim and title_100 not in matched and title not in matched \
-                            and f_year == s_year:  # abs(f_year - s_year) <= 1:
+                    if title_sim > best_sim and title_100 not in matched and title not in matched and f_year == s_year:
                         best_sim = title_sim
                         candidate_title_100 = title_100
                         candidate_title = title
@@ -259,10 +246,15 @@ class MovieLensMR:
                     # add movie to the dict containing the matches
                     ml_100_idx_to_imdb[ml_100_title_to_idx[candidate_title_100]] = \
                         ml_idx_to_link[ml_title_to_idx[candidate_title]]
-                    matched.append(candidate_title_100)
-                    matched.append(candidate_title)
+                    if candidate_title_100 == candidate_title:
+                        # match only one if they are the same
+                        matched.append(candidate_title)
+                    else:
+                        # match both if they are different
+                        matched.append(candidate_title_100)
+                        matched.append(candidate_title)
 
-            no_matched_100k = set(no_matched_100k) - set(matched)
+            no_matched_100k = list(set(no_matched_100k) - set(matched))
 
             # now, we need to fetch the wikidata URIs for the movies we have matched between MovieLens-100k and
             # MovieLens-latest-small
@@ -275,27 +267,40 @@ class MovieLensMR:
 
             imdb_to_wikidata = {match['label']['value']: match['film']['value'] for match in result}
 
-            ml_100_idx_to_wikidata = {idx: imdb_to_wikidata[imdb_id] for idx, imdb_id in ml_100_idx_to_imdb.items()
-                                      if imdb_id in imdb_to_wikidata}
+            # create indexing from MovieLens-100k to Wikidata URIs - this indexing contains an entry only if the
+            # previous query found the link between iMDB id and Wikidata entity - for 3 movies the link is not found
+            # ml_100_idx_to_wikidata = {idx: imdb_to_wikidata[imdb_id] for idx, imdb_id in ml_100_idx_to_imdb.items()
+            #                           if imdb_id in imdb_to_wikidata}
+            ml_100_idx_to_wikidata = {}
+            for idx, imdb_id in ml_100_idx_to_imdb.items():
+                if imdb_id in imdb_to_wikidata:
+                    ml_100_idx_to_wikidata[idx] = imdb_to_wikidata[imdb_id]
+                else:
+                    no_matched_100k.append(ml_100_idx_to_title[idx])
+                    matched.remove(ml_100_idx_to_title[idx])
 
             # filter mapping based on presence of movie in MindReader
-            mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv")).to_dict("records")
-            mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
+            mr_entities = pd.read_csv(os.path.join(self.data_path,
+                                                   "mindreader/processed/entities.csv")).to_dict("records")
             mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities if "Movie" in entity["labels"]}
             mr_title_to_uri = {title: uri for uri, title in mr_uri_to_title.items()}
-            print(len(mr_uri_to_title))
-            print(len(mr_title_to_uri))
-            mr_movie_decade = {triple["head_uri"]: int(triple["tail_uri"].split("-")[1]) for triple in mr_triples
-                               if triple["relation"] == "FROM_DECADE"
-                               if triple["head_uri"] in mr_uri_to_title}
-            ml_100_idx_to_mr_uri = {idx: uri for idx, uri in ml_100_idx_to_wikidata.items()
-                                    if uri in mr_uri_to_title}
+            # the match is kept only if the retrieved wikidata URI is in the corpus of movies of MindReader
+            ml_100_idx_to_mr_uri = {}
+            for idx, uri in ml_100_idx_to_wikidata.items():
+                if uri in mr_uri_to_title:
+                    ml_100_idx_to_mr_uri[idx] = uri
+                else:
+                    no_matched_100k.append(ml_100_idx_to_title[idx])
+                    matched.remove(ml_100_idx_to_title[idx])
+
             no_matched_mr = set(mr_uri_to_title.keys()) - set(ml_100_idx_to_mr_uri.values())
 
-            # repeat fuzzy procedure between MovieLens-100k and MindReader
+            # repeat fuzzy procedure between MovieLens-100k and MindReader directly, since there could be some errors
+            # in the links of the ml-latest dataset
 
             for title_100 in no_matched_100k:
                 try:
+                    # get year of ml-100k movie
                     f_year = int(title_100.strip()[-6:][1:5])
                 except ValueError:
                     continue
@@ -303,25 +308,23 @@ class MovieLensMR:
                 candidate_title_100 = ""
                 candidate_mr_title = ""
                 for uri in no_matched_mr:
+                    try:
+                        # get year of MindReader movie
+                        s_year = int(mr_uri_to_title[uri].strip()[-6:][1:5])
+                    except ValueError:
+                        continue
                     # compute similarity between titles with year removed
-                    title_sim = fuzz.token_set_ratio(title_100[:-6], mr_uri_to_title[uri])
+                    title_sim = fuzz.token_set_ratio(title_100.strip()[:-6], mr_uri_to_title[uri].strip()[:-6])
                     # search for best similarity between titles
                     if title_sim > best_sim and title_100 not in matched and mr_uri_to_title[uri] not in matched \
-                            and (mr_movie_decade[uri] <= f_year < mr_movie_decade[uri] + 10):
+                            and f_year == s_year:
                         best_sim = title_sim
                         candidate_title_100 = title_100
                         candidate_mr_title = mr_uri_to_title[uri]
                 if best_sim >= 96:
-                    mr_year = mr_movie_decade[mr_title_to_uri[candidate_mr_title]]
-                    answer = ""
-                    while answer not in ("Y", "N"):
-                        answer = input("World you like to match %s with %s (%s) (Y/N)" % (candidate_title_100,
-                                                                                            candidate_mr_title,
-                                                                                            str(mr_year) + "-" + str(mr_year + 10)))
-                    if answer == "Y":
-                        ml_100_idx_to_mr_uri[ml_100_title_to_idx[candidate_title_100]] = mr_title_to_uri[candidate_mr_title]
-                        matched.append(candidate_title_100)
-                        matched.append(candidate_mr_title)
+                    ml_100_idx_to_mr_uri[ml_100_title_to_idx[candidate_title_100]] = mr_title_to_uri[candidate_mr_title]
+                    matched.append(candidate_title_100)
+                    matched.append(candidate_mr_title)
 
             mapping = pd.DataFrame.from_dict({"idx": list(ml_100_idx_to_mr_uri.keys()),
                                               "uri": list(ml_100_idx_to_mr_uri.values())})
@@ -345,7 +348,7 @@ class MovieLensMR:
         MindReader to increase the performance. For this reason, an ablation study should be done. We need to train both
         with genres and without genres.
         """
-        # create a new unified indexing. The same movie on MovieLens-100k and MindReader will have different indexes
+        # create a new unified indexing. The same movie on MovieLens-100k and MindReader has different indexes
         # we need to associate them to the same index
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv")).to_dict("records")
         mr_movies = [entity["uri"] for entity in mr_entities if "Movie" in entity["labels"].split("|")]
