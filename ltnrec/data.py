@@ -47,9 +47,21 @@ class MovieLensMR:
             self.fix_mr()
         if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/u.data")):
             self.fix_ml_100k()
+        self.ml_100_movie_info = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
+                                             encoding="iso-8859-1", header=None).to_dict("records")
+        self.ml_100_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"),
+                                          sep="\t", header=None).to_dict("records")
+        self.mr_entities = pd.read_csv(os.path.join(self.data_path,
+                                                    "mindreader/processed/entities.csv")).to_dict("records")
+        self.mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
+        self.mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv")).to_dict("records")
         self.idx_to_uri = self.create_mapping()
+        self.genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
+                       "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
+                       "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
+                       "Western Film")
         self.create_intersection()
-        # self.create_union()
+        self.create_union()
 
     def check(self):
         """
@@ -82,7 +94,8 @@ class MovieLensMR:
         """
         It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
         has rated multiple times the same movie.
-        It creates new csv files without the duplicates, both u.data and u.item.
+        It also recreates the indexing after these modifications have been done.
+        It creates new csv files without the duplicates, both u.data and u.item, with the new indexing.
         """
         # get MovieLens-100k movies
         ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
@@ -123,6 +136,33 @@ class MovieLensMR:
         ml_ratings = ml_ratings.append(new_ratings)
         ml_ratings.reset_index()
         ml_100_movies_file.reset_index()
+        # create new indexing for users and items of MovieLens-100k
+        user_mapping = {}
+        item_mapping = {}
+        u = i = 0
+        ml_ratings_dict = ml_ratings.to_dict("records")
+        for rating in ml_ratings_dict:
+            if rating[0] not in user_mapping:
+                user_mapping[rating[0]] = u
+                rating[0] = u
+                u += 1
+            else:
+                rating[0] = user_mapping[rating[0]]
+            if rating[1] not in item_mapping:
+                item_mapping[rating[1]] = i
+                rating[1] = i
+                i += 1
+            else:
+                rating[1] = item_mapping[rating[1]]
+
+        ml_ratings = pd.DataFrame.from_records(ml_ratings_dict)
+        # correct indexes also on the file containing the movie info
+        new_indexes = []
+        for idx in ml_100_movies_file[0]:
+            new_indexes.append(item_mapping[idx])
+        ml_100_movies_file[0] = new_indexes
+        ml_100_movies_file = ml_100_movies_file.sort_values(by=[0])
+
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
         ml_100_movies_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
@@ -182,7 +222,7 @@ class MovieLensMR:
 
         Returns a dictionary containing this mapping, namely ml_idx -> mr_uri.
         """
-        if os.path.exists("./datasets/mapping.csv"):
+        if os.path.exists(os.path.join(self.data_path, "mapping.csv")):
             ml_100_idx_to_mr_uri = pd.read_csv("./datasets/mapping.csv").to_dict("records")
             ml_100_idx_to_mr_uri = {mapping["idx"]: mapping["uri"] for mapping in ml_100_idx_to_mr_uri}
         else:
@@ -199,9 +239,7 @@ class MovieLensMR:
             ml_title_to_idx = {movie["title"]: movie["movieId"] for movie in ml_movies_file}
 
             # get imdb id for movies in MovieLens-100k
-            ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
-                                             encoding="iso-8859-1", header=None).to_dict("records")
-            ml_100_title_to_idx = {movie[1]: movie[0] for movie in ml_100_movies_file}
+            ml_100_title_to_idx = {movie[1]: movie[0] for movie in self.ml_100_movie_info}
             ml_100_idx_to_title = {idx: title for title, idx in ml_100_title_to_idx.items()}
 
             # match titles between MovieLens-100k and MovieLens-latest movies to get imdb id of MovieLens-100k movies
@@ -280,9 +318,8 @@ class MovieLensMR:
                     matched.remove(ml_100_idx_to_title[idx])
 
             # filter mapping based on presence of movie in MindReader
-            mr_entities = pd.read_csv(os.path.join(self.data_path,
-                                                   "mindreader/processed/entities.csv")).to_dict("records")
-            mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities if "Movie" in entity["labels"]}
+            mr_uri_to_title = {entity["uri"]: entity["name"] for entity in self.mr_entities
+                               if "Movie" in entity["labels"]}
             mr_title_to_uri = {title: uri for uri, title in mr_uri_to_title.items()}
             # the match is kept only if the retrieved wikidata URI is in the corpus of movies of MindReader
             ml_100_idx_to_mr_uri = {}
@@ -350,31 +387,25 @@ class MovieLensMR:
         """
         # create a new unified indexing. The same movie on MovieLens-100k and MindReader has different indexes
         # we need to associate them to the same index
-        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv")).to_dict("records")
-        mr_movies = [entity["uri"] for entity in mr_entities if "Movie" in entity["labels"].split("|")]
-        # get only the mapping for movies for which the URI is present in the MindReader dataset
-        joint_movies = {idx: uri for idx, uri in self.idx_to_uri.items() if uri in mr_movies}
         # create unique indexing
-        ml_to_idx = {idx: i for i, idx in enumerate(joint_movies.keys())}
-        mr_to_idx = {uri: i for i, uri in enumerate(joint_movies.values())}
-        # create inverse mapping too, this could be helpful to go from one dataset to the other
+        ml_to_idx = {idx: i for i, idx in enumerate(self.idx_to_uri.keys())}
+        mr_to_idx = {uri: i for i, uri in enumerate(self.idx_to_uri.values())}
+        # create inverse mapping too, this could be helpful to go from one indexing to the other
         idx_to_ml = {idx: ml_idx for ml_idx, idx in ml_to_idx.items()}
         idx_to_mr = {idx: uri for uri, idx in mr_to_idx.items()}
-        # take MovieLens-100k ratings
-        ml_ratings_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.data"),
-                                      sep="\t", header=None).to_dict("records")
-        # take only ratings of the movies that are in the joint dataset
+
+        # take only ratings of the 100k movies that are in the joint dataset
         # create implicit ratings (pos if rating >= 4, 0 otherwise)
-        ml_ratings = np.array([(rating[0], rating[1], 1 if rating[2] >= 4 else 0) for rating in ml_ratings_file
-                               if rating[1] in joint_movies.keys()])
-        # take MindReader ratings
-        mr_ratings_file = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv")).to_dict("records")
+        ml_ratings = np.array([(rating[0], rating[1], 1 if rating[2] >= 4 else 0) for rating in self.ml_100_movie_info
+                               if rating[1] in self.idx_to_uri])
+
         # take MindReader ratings only for movies in the joint dataset
         # remove the unknown ratings (ratings equal to 0)
         # map pos ratings to 1 and neg rating to 0
         mr_ratings = [(rating["userId"], rating["uri"], rating["sentiment"] if rating["sentiment"] != -1 else 0)
-                      for rating in mr_ratings_file
-                      if rating["uri"] in joint_movies.values() if rating["sentiment"] != 0]
+                      for rating in self.mr_ratings
+                      if rating["uri"] in self.idx_to_uri.values()
+                      if rating["sentiment"] != 0]
         # create unique user indexing
         user_mapping = {}
         i = 0
@@ -395,24 +426,21 @@ class MovieLensMR:
         dataset_ratings = np.array(dataset_ratings)
 
         # we need to associate each movie to its genres
-        # in this case we can use the genres of MindReader since this is the intersection dataset
-        # in the union we need to use also the genres of MovieLens-100k, since we have some movies for which we do not
+        # in this case, we can use the genres of MindReader since this is the intersection dataset
+        # in the union, we need to use also the genres of MovieLens-100k, since we have some movies for which we do not
         # have the information in MindReader
         # we use only the most common genres, to reduce sparsity (genres of MovieLens-100k)
-
-        genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
-                  "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
-                  "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film", "Western Film")
-
+        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/processed/entities.csv")).to_dict("records")
         mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
         # take the URIs of selected genres
         mr_uri_to_genre = {entity["uri"]: entity["name"] for entity in mr_entities if "Genre" in entity["labels"]
-                           if entity["name"] in genres}
-        # dict which associate each movie to its genres (index of the genre inside genres, this is used for one-hot enc)
-        mr_movie_genres = [(triple["head_uri"], genres.index(mr_uri_to_genre[triple["tail_uri"]]))
+                           if entity["name"] in self.genres}
+        # dict which associates each movie to its genres (index of the genre inside genres, this is used
+        # for one-hot encoding)
+        mr_movie_genres = [(triple["head_uri"], self.genres.index(mr_uri_to_genre[triple["tail_uri"]]))
                            for triple in mr_triples
                            if triple["relation"] == "HAS_GENRE"
-                           if triple["head_uri"] in joint_movies.values()
+                           if triple["head_uri"] in self.idx_to_uri.values()
                            if triple["tail_uri"] in mr_uri_to_genre]
         dataset_movie_to_genres = {}
         for uri, genre in mr_movie_genres:
@@ -424,7 +452,7 @@ class MovieLensMR:
         # now, we need to associate each user to the genres she likes or dislikes
         # this is really similar to what we have done for movies
         # get ratings of users of MindReader for the genres
-        mr_genre_ratings = [(rating["userId"], genres.index(mr_uri_to_genre[rating["uri"]]),
+        mr_genre_ratings = [(rating["userId"], self.genres.index(mr_uri_to_genre[rating["uri"]]),
                              1 if rating["sentiment"] != -1 else 0)
                             for rating in mr_ratings_file
                             if rating["uri"] in mr_uri_to_genre
@@ -444,8 +472,7 @@ class MovieLensMR:
                 else:
                     dataset_user_to_genres[user_mapping[user]]["dislikes"].append(genre)
 
-        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, ml_ratings, mr_ratings, \
-               ml_to_idx, mr_to_idx, idx_to_ml, idx_to_mr
+        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres
 
     def create_union(self):
         """
@@ -466,46 +493,49 @@ class MovieLensMR:
         """
         # for creating the union, I need to take all the movies of MovieLens and all the movies of MindReader
         # I still have to create a unique indexing. Some movies will be map to the same idx, some not
-        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv")).to_dict("records")
-        mr_movies = [entity["uri"] for entity in mr_entities if "Movie" in entity["labels"].split("|")]
         # idea: I create indexes for joint movies between the datasets, then I create indexes for the remaining movies
         # in MovieLens-100k and MindReader
-        # get mapping for movies for which the URI is present in the MindReader dataset
-        joint_movies = {idx: uri for idx, uri in self.idx_to_uri.items() if uri in mr_movies}
         # create unique indexing for shared movies between datasets
-        ml_to_idx = {idx: i for i, idx in enumerate(joint_movies.keys())}
-        mr_to_idx = {uri: i for i, uri in enumerate(joint_movies.values())}
+        ml_to_idx = {idx: i for i, idx in enumerate(self.idx_to_uri.keys())}
+        mr_to_idx = {uri: i for i, uri in enumerate(self.idx_to_uri.values())}
         # create indexing for movies which are not shared
         # take movies of MovieLens-100k
-        ml_movies = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
+        ml_movies = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
                                 encoding="iso-8859-1", header=None).to_dict("records")
-        i = len(joint_movies)
-        for movie in ml_movies:
-            if movie[0] not in joint_movies:
-                ml_to_idx[movie[0]] = i
-                i += 1
-
-        for movie in mr_movies:
-            if movie not in joint_movies.values():
-                mr_to_idx[movie] = i
-                i += 1
-
-        # create inverse mapping too, this could be helpful to go from one dataset to the other
-        idx_to_ml = {idx: ml_idx for ml_idx, idx in ml_to_idx.items()}
-        idx_to_mr = {idx: uri for uri, idx in mr_to_idx.items()}
         # take MovieLens-100k ratings
         ml_ratings_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.data"),
                                       sep="\t", header=None).to_dict("records")
         # create implicit ratings (pos if rating >= 4, 0 otherwise)
         ml_ratings = np.array([(rating[0], rating[1], 1 if rating[2] >= 4 else 0) for rating in ml_ratings_file])
+        set_rated_ml = set([i for _, i, _ in ml_ratings])
+        # create indexes for ml-100k movie not in the joint set
+        i = len(self.idx_to_uri)
+        for movie in ml_movies:
+            if movie[0] not in self.idx_to_uri and movie[0] in set_rated_ml:
+                ml_to_idx[movie[0]] = i
+                i += 1
+
         # take MindReader ratings
         mr_ratings_file = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv")).to_dict("records")
+        # take MindReader movie URIs
+        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/processed/entities.csv")).to_dict("records")
+        mr_movies = [entity["uri"] for entity in mr_entities if "Movie" in entity["labels"]]
         # remove the unknown ratings (ratings equal to 0)
         # map pos ratings to 1 and neg rating to 0
         mr_ratings = [(rating["userId"], rating["uri"], rating["sentiment"] if rating["sentiment"] != -1 else 0)
                       for rating in mr_ratings_file
                       if rating["sentiment"] != 0
                       if rating["uri"] in mr_movies]
+        set_rated_mr = set([i for _, i, _ in mr_ratings])
+        for movie in mr_movies:
+            if movie not in self.idx_to_uri.values() and movie in set_rated_mr:
+                mr_to_idx[movie] = i
+                i += 1
+
+        # create inverse mapping too, this could be helpful to go from one dataset to the other
+        idx_to_ml = {idx: ml_idx for ml_idx, idx in ml_to_idx.items()}
+        idx_to_mr = {idx: uri for uri, idx in mr_to_idx.items()}
+
         # create unique user indexing
         user_mapping = {}
         i = 0
@@ -533,7 +563,6 @@ class MovieLensMR:
         genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
                   "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
                   "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film", "Western Film")
-
         mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
         # take the URIs of selected genres
         mr_uri_to_genre = {entity["uri"]: entity["name"] for entity in mr_entities if "Genre" in entity["labels"]
@@ -548,7 +577,7 @@ class MovieLensMR:
         with open(os.path.join(self.data_path, "ml-100k/u.item"), encoding="iso-8859-1") as fp:
             for line in fp:
                 idx = int(line.split("|")[0])
-                if idx not in joint_movies:
+                if idx not in self.idx_to_uri:
                     ml_movie_genres.extend([(idx, genre_idx)
                                             for genre_idx, genre in enumerate(line[-36:].split("|"))
                                             if int(genre) == 1])
@@ -588,5 +617,4 @@ class MovieLensMR:
                 else:
                     dataset_user_to_genres[user_mapping[user]]["dislikes"].append(genre)
 
-        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, ml_ratings, mr_ratings, \
-               ml_to_idx, mr_to_idx, idx_to_ml, idx_to_mr
+        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres
