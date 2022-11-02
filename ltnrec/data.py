@@ -10,10 +10,9 @@ from fuzzywuzzy import fuzz
 from collections import Counter
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
 
-
 # todo osservazione interessante: alcuni film non hanno ratings, potrebbero essere trattati come dei casi di cold-start in futuro, e' che non li puoi valutare
 # todo per simulare il cold-start si possono prendere tutti i rating di un film e metterli in test, in modo tale che durante il training non ci siano piu' rating per quel film
-# todo controllare se ci sono film senza generi su movielens
+
 
 def send_query(query):
     """
@@ -102,7 +101,7 @@ class MovieLensMR:
         It also recreates the indexing after these modifications have been done.
         It creates new csv files without the duplicates, both u.data and u.item, with the new indexing.
 
-        :param threshold: a threshold used to create implicit feedbacks from explicit feedbacks
+        :param threshold: a threshold used to create implicit feedbacks from the explicit feedbacks of ml-100k
         """
         # get MovieLens-100k movies
         ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
@@ -151,16 +150,12 @@ class MovieLensMR:
         for rating in ml_ratings_dict:
             if rating[0] not in user_mapping:
                 user_mapping[rating[0]] = u
-                rating[0] = u
                 u += 1
-            else:
-                rating[0] = user_mapping[rating[0]]
             if rating[1] not in item_mapping:
                 item_mapping[rating[1]] = i
-                rating[1] = i
                 i += 1
-            else:
-                rating[1] = item_mapping[rating[1]]
+            rating[0] = user_mapping[rating[0]]
+            rating[1] = item_mapping[rating[1]]
             rating[2] = 1 if rating[2] >= threshold else 0
 
         ml_ratings = pd.DataFrame.from_records(ml_ratings_dict)
@@ -170,14 +165,15 @@ class MovieLensMR:
             new_indexes.append(item_mapping[idx])
         ml_100_movies_file[0] = new_indexes
         ml_100_movies_file = ml_100_movies_file.sort_values(by=[0])
+        ml_100_movies_file.reset_index()
 
         # process genres and get indexes
         ml_100_movies_records = []
         for row_idx, row in ml_100_movies_file.iterrows():
-            # todo guardare anche qui se ci puo' essere un film senza generi
-            movie_genres = [genre_idx for _, genre_idx in row[6:].items()]
+            movie_genres = [genre for _, genre in row[6:].items()]
             movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
-            ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)})
+            ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)
+                                         if movie_genres_idx else "None"})
 
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
