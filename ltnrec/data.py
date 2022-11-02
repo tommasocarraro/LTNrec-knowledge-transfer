@@ -8,7 +8,10 @@ import string
 import unidecode
 from fuzzywuzzy import fuzz
 from collections import Counter
+import random
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
+
+
 # todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un match inutile perche' non abbiamo un test set e nemmeno una ground truth per quei film
 # todo bisognerebbe discutere se possano essere comunque utili con la scusa dei generi, magari quelli propogano informazione, pero' non avendo quei film dei rating, l'informazione si propaga solo attraverso il LikesGenre appreso
 # todo discutere di questa cosa con Luciano e Alessandro
@@ -69,8 +72,6 @@ class MovieLensMR:
         self.mr_genre_ratings = pd.read_csv(os.path.join(self.data_path,
                                                          "mindreader/processed/genre_ratings.csv")).to_dict("records")
         self.ml_to_mr = self.create_mapping()
-        # self.create_intersection()
-        self.create_union()
 
     def check(self):
         """
@@ -178,7 +179,7 @@ class MovieLensMR:
             movie_genres = [genre for _, genre in row[6:].items()]
             movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
             ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)
-                                         if movie_genres_idx else "None"})
+            if movie_genres_idx else "None"})
 
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
@@ -226,7 +227,7 @@ class MovieLensMR:
 
         # put date on the title when it is available
         mr_uri_to_title = {uri: "%s (%d)" % (title, int(mr_uri_to_date[uri]))
-                           if uri in mr_uri_to_date else title for uri, title in mr_uri_to_title.items()}
+        if uri in mr_uri_to_date else title for uri, title in mr_uri_to_title.items()}
 
         # recreate "name" column of original dataframe - the new column has now dates on the titles when they are
         # available
@@ -259,7 +260,8 @@ class MovieLensMR:
             rating["uri"] = item_mapping[rating["uri"]]
             rating["userId"] = user_mapping[rating["userId"]]
             rating["sentiment"] = int(rating["sentiment"] > 0)
-            mr_movie_ratings_new.append({"u_idx": rating["userId"], "i_idx": rating["uri"], "rate": rating["sentiment"]})
+            mr_movie_ratings_new.append(
+                {"u_idx": rating["userId"], "i_idx": rating["uri"], "rate": rating["sentiment"]})
         mr_movie_ratings_new = pd.DataFrame.from_records(mr_movie_ratings_new)
         mr_movie_ratings_new.to_csv(os.path.join(self.data_path, "mindreader/processed/movie_ratings.csv"), index=False)
 
@@ -486,7 +488,7 @@ class MovieLensMR:
 
         return ml_100_idx_to_mr_idx
 
-    def create_union(self):
+    def create_ml_mr_fusion(self):
         """
         It creates the dataset that is the union between the movies of MovieLens-100k and the movies of
         MindReader. We have ratings from users of MovieLens and ratings from users of MindReader. For MindReader, we
@@ -525,9 +527,6 @@ class MovieLensMR:
             if movie["idx"] not in self.ml_to_mr.values():
                 mr_to_new_idx[movie["idx"]] = i
                 i += 1
-        # create inverse mapping too, this could be helpful to go from one dataset to the other
-        new_idx_to_ml = {new_idx: ml_idx for ml_idx, new_idx in ml_to_new_idx.items()}
-        new_idx_to_mr = {new_idx: mr_idx for mr_idx, new_idx in mr_to_new_idx.items()}
 
         # create unique user indexing
         user_mapping_ml = {}
@@ -576,4 +575,55 @@ class MovieLensMR:
                 else:
                     dataset_user_to_genres[user_mapping_mr[u]]["dislikes"].append(g)
 
-        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres
+        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, ml_to_new_idx, mr_to_new_idx, \
+               user_mapping_ml, user_mapping_mr
+
+    def get_ml100k_folds(self, seed):
+        """
+        Creates and returns the training, validation, and test set of the MovieLens-100k dataset.
+
+        The procedure starts from the entire datasets. To create the test set, one random positive movie rating for
+        each user is held-out. To complete the test example of the user, 100 irrelevant movies are randomly sampled.
+        The metrics evaluate the recommendation based on the position of the positive movie in a ranking containing all
+        the 101 movies.
+
+        The validation set is constructed in the same way, starting from the remaining rating in the dataset.
+
+        The seed parameter is used for reproducibility of experiments.
+        """
+        # set seed
+        random.seed(seed)
+        ratings = pd.DataFrame.from_records(self.ml_100_ratings)
+        # group by user idx
+        groups = ratings.groupby(by=[0])
+        # get set of movie indexes
+        movies = set(ratings[1].unique())
+        validation = []
+        test = []
+        for user_idx, group in groups:
+            # positive ratings for the user
+            group_pos = group[group[2] == 1]
+            # check if it is possible to sample
+            if len(group_pos):
+                # take one random positive rating for test and one for validation
+                sampled_pos = group_pos.sample(n=2, random_state=seed)
+                # remove sampled ratings from the dataset
+                ratings.drop(sampled_pos.index, inplace=True)
+                sampled_pos = list(sampled_pos[1])
+                # remove sampled ratings from the group
+                seen_without_test = group_pos[~group_pos[1].isin(sampled_pos)]
+                # take 100 randomly sampled negative (not seen by the user) movies for test and validation
+                not_seen = movies - set(seen_without_test[1])
+                neg_movies_test = random.sample(not_seen, 100)
+                neg_movies_val = random.sample(not_seen, 100)
+                validation.append([[user_idx, item] for item in neg_movies_val + [sampled_pos[0]]])
+                test.append([[user_idx, item] for item in neg_movies_test + [sampled_pos[1]]])
+
+        validation = np.array(validation)
+        test = np.array(test)
+
+        # create np array of training ratings
+        train = ratings.to_dict("records")
+        train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
+
+        return train, validation, test
