@@ -161,8 +161,8 @@ class MovieLensMR:
         ml_ratings = pd.DataFrame.from_records(ml_ratings_dict)
         # correct indexes also on the file containing the movie info
         new_indexes = []
-        for idx in ml_100_movies_file[0]:
-            new_indexes.append(item_mapping[idx])
+        for _, movie_idx in ml_100_movies_file[0].items():
+            new_indexes.append(item_mapping[movie_idx])
         ml_100_movies_file[0] = new_indexes
         ml_100_movies_file = ml_100_movies_file.sort_values(by=[0])
         ml_100_movies_file.reset_index()
@@ -200,6 +200,7 @@ class MovieLensMR:
         """
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
+        # get titles of movies
         mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities_dict
                            if "Movie" in entity["labels"]}
 
@@ -246,16 +247,12 @@ class MovieLensMR:
         for rating in mr_movie_ratings:
             if rating["userId"] not in user_mapping:
                 user_mapping[rating["userId"]] = u
-                rating["userId"] = u
                 u += 1
-            else:
-                rating["userId"] = user_mapping[rating["userId"]]
             if rating["uri"] not in item_mapping:
                 item_mapping[rating["uri"]] = i
-                rating["uri"] = i
                 i += 1
-            else:
-                rating["uri"] = item_mapping[rating["uri"]]
+            rating["uri"] = item_mapping[rating["uri"]]
+            rating["userId"] = user_mapping[rating["userId"]]
             rating["sentiment"] = int(rating["sentiment"] > 0)
             mr_movie_ratings_new.append({"u_idx": rating["userId"], "i_idx": rating["uri"], "rate": rating["sentiment"]})
         mr_movie_ratings_new = pd.DataFrame.from_records(mr_movie_ratings_new)
@@ -265,10 +262,8 @@ class MovieLensMR:
         for rating in mr_genre_ratings:
             if rating["userId"] not in user_mapping:
                 user_mapping[rating["userId"]] = u
-                rating["userId"] = u
                 u += 1
-            else:
-                rating["userId"] = user_mapping[rating["userId"]]
+            rating["userId"] = user_mapping[rating["userId"]]
             rating["uri"] = self.genres.index(mr_genres[rating["uri"]])
             rating["sentiment"] = int(rating["sentiment"] > 0)
             mr_genre_ratings_new.append(
@@ -297,7 +292,7 @@ class MovieLensMR:
         mr_entities_new = []
         for entity in mr_entities_dict:
             if entity["uri"] in item_mapping:
-                mr_entities_new.append({"idx": item_mapping[entity["uri"]], #2879
+                mr_entities_new.append({"idx": item_mapping[entity["uri"]],
                                         "title": entity["name"],
                                         "genres": "|".join([str(g)
                                                             for g in mr_movie_genre_dict[item_mapping[entity["uri"]]]
