@@ -11,6 +11,10 @@ from collections import Counter
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
 
 
+# todo osservazione interessante: alcuni film non hanno ratings, potrebbero essere trattati come dei casi di cold-start in futuro, e' che non li puoi valutare
+# todo per simulare il cold-start si possono prendere tutti i rating di un film e metterli in test, in modo tale che durante il training non ci siano piu' rating per quel film
+# todo controllare se ci sono film senza generi su movielens
+
 def send_query(query):
     """
     It sends a sparql query to the Wikidata ontology and returns the result.
@@ -43,10 +47,15 @@ class MovieLensMR:
     def __init__(self, data_path):
         self.data_path = data_path
         self.check()
-        if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/entities.csv")):
-            self.fix_mr()
-        if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/u.data")):
-            self.fix_ml_100k()
+        self.genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
+                       "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
+                       "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
+                       "Western Film")
+        if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv")):
+            self.process_ml_100k()
+        if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv")):
+            self.process_mr()
+        pd.d()
         self.ml_100_movie_info = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
                                              encoding="iso-8859-1", header=None).to_dict("records")
         self.ml_100_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"),
@@ -56,10 +65,6 @@ class MovieLensMR:
         self.mr_triples = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
         self.mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv")).to_dict("records")
         self.idx_to_uri = self.create_mapping()
-        self.genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
-                       "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
-                       "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
-                       "Western Film")
         self.create_intersection()
         self.create_union()
 
@@ -90,12 +95,14 @@ class MovieLensMR:
                                                                                           "movielens " \
                                                                                           "latest is missing"
 
-    def fix_ml_100k(self):
+    def process_ml_100k(self, threshold=4):
         """
         It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
         has rated multiple times the same movie.
         It also recreates the indexing after these modifications have been done.
         It creates new csv files without the duplicates, both u.data and u.item, with the new indexing.
+
+        :param threshold: a threshold used to create implicit feedbacks from explicit feedbacks
         """
         # get MovieLens-100k movies
         ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
@@ -154,6 +161,7 @@ class MovieLensMR:
                 i += 1
             else:
                 rating[1] = item_mapping[rating[1]]
+            rating[2] = 1 if rating[2] >= threshold else 0
 
         ml_ratings = pd.DataFrame.from_records(ml_ratings_dict)
         # correct indexes also on the file containing the movie info
@@ -163,18 +171,36 @@ class MovieLensMR:
         ml_100_movies_file[0] = new_indexes
         ml_100_movies_file = ml_100_movies_file.sort_values(by=[0])
 
+        # process genres and get indexes
+        ml_100_movies_records = []
+        for row_idx, row in ml_100_movies_file.iterrows():
+            # todo guardare anche qui se ci puo' essere un film senza generi
+            movie_genres = [genre_idx for _, genre_idx in row[6:].items()]
+            movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
+            ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)})
+
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
-        ml_100_movies_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"), sep="|",
+        ml_100_movies_file = pd.DataFrame.from_records(ml_100_movies_records)
+        ml_100_movies_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"),
                                   encoding="iso-8859-1", index=False, header=None)
 
-    def fix_mr(self):
+        # save also the files containing the mappings
+        user_mapping_records = [{"old_idx": old_idx, "new_idx": new_idx} for old_idx, new_idx in user_mapping.items()]
+        item_mapping_records = [{"old_idx": old_idx, "new_idx": new_idx} for old_idx, new_idx in item_mapping.items()]
+        user_mapping_file = pd.DataFrame.from_records(user_mapping_records)
+        user_mapping_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/user_mapping.csv"), index=False)
+        item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
+        item_mapping_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv"), index=False)
+
+    def process_mr(self):
         """
         It fixes the MindReader dataset by removing duplicated titles. There could be cases in which the title is the
         same even if the movie is slightly different, for example from a different year.
-
         To remove duplicates, we add the publication date to the title of the movie in brackets, as for the MovieLens
         datasets.
+        After these modifications have been done, it recreates the indexing of MindReader by substituting URIs with
+        proper indexes. The same is done for the user identifiers.
         """
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
@@ -205,7 +231,93 @@ class MovieLensMR:
         mr_entities["name"] = [mr_uri_to_title[entity["uri"]]
                                if "Movie" in entity["labels"] else entity["name"] for entity in mr_entities_dict]
 
-        mr_entities.to_csv(os.path.join(self.data_path, "mindreader/processed/entities.csv"), index=False)
+        # create new indexing for the dataset (users, movies)
+        mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv"))
+        mr_entities_dict = mr_entities.to_dict("records")
+        mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
+        # we want ratings only for the allowed genres
+        mr_genres = {entity["uri"]: entity["name"] for entity in mr_entities_dict if "Genre" in entity["labels"]
+                     if entity["name"] in self.genres}
+        # remove unknown ratings
+        mr_movie_ratings = mr_ratings[
+            mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+        mr_genre_ratings = mr_ratings[
+            mr_ratings["uri"].isin(mr_genres) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+        u = i = 0
+        user_mapping = {}
+        item_mapping = {}
+        mr_movie_ratings_new = []
+        for rating in mr_movie_ratings:
+            if rating["userId"] not in user_mapping:
+                user_mapping[rating["userId"]] = u
+                rating["userId"] = u
+                u += 1
+            else:
+                rating["userId"] = user_mapping[rating["userId"]]
+            if rating["uri"] not in item_mapping:
+                item_mapping[rating["uri"]] = i
+                rating["uri"] = i
+                i += 1
+            else:
+                rating["uri"] = item_mapping[rating["uri"]]
+            rating["sentiment"] = int(rating["sentiment"] > 0)
+            mr_movie_ratings_new.append({"u_idx": rating["userId"], "i_idx": rating["uri"], "rate": rating["sentiment"]})
+        mr_movie_ratings_new = pd.DataFrame.from_records(mr_movie_ratings_new)
+        mr_movie_ratings_new.to_csv(os.path.join(self.data_path, "mindreader/processed/movie_ratings.csv"), index=False)
+
+        mr_genre_ratings_new = []
+        for rating in mr_genre_ratings:
+            if rating["userId"] not in user_mapping:
+                user_mapping[rating["userId"]] = u
+                rating["userId"] = u
+                u += 1
+            else:
+                rating["userId"] = user_mapping[rating["userId"]]
+            rating["uri"] = self.genres.index(mr_genres[rating["uri"]])
+            rating["sentiment"] = int(rating["sentiment"] > 0)
+            mr_genre_ratings_new.append(
+                {"u_idx": rating["userId"], "g_idx": rating["uri"], "rate": rating["sentiment"]})
+        mr_genre_ratings_new = pd.DataFrame.from_records(mr_genre_ratings_new)
+        mr_genre_ratings_new.to_csv(os.path.join(self.data_path, "mindreader/processed/genre_ratings.csv"), index=False)
+
+        # now, we need to change the URIs in the triple.csv file and create e new file
+        mr_triples_dict = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
+        mr_movie_genre_dict = {}
+        for triple in mr_triples_dict:
+            if triple["head_uri"] in item_mapping and triple["tail_uri"] in mr_genres \
+                    and triple["relation"] == "HAS_GENRE":
+                if item_mapping[triple["head_uri"]] not in mr_movie_genre_dict:
+                    mr_movie_genre_dict[item_mapping[
+                        triple["head_uri"]]] = [self.genres.index(mr_genres[triple["tail_uri"]])]
+                else:
+                    mr_movie_genre_dict[item_mapping[
+                        triple["head_uri"]]].append(self.genres.index(mr_genres[triple["tail_uri"]]))
+
+        # now, we need to change the URIs in the entities.csv file and create a new file
+        # the new file contains also the genres of the movies, as in MovieLens
+        # if a movie is not in mr_movie_genre_dict, it means that the movie has not ratings, so we do not include it
+        # in the entities since it is not necessary for the purpose of our experiments
+        # there could be a movie that is rated but does not belong to any of the selected genres
+        mr_entities_new = []
+        for entity in mr_entities_dict:
+            if entity["uri"] in item_mapping:
+                mr_entities_new.append({"idx": item_mapping[entity["uri"]], #2879
+                                        "title": entity["name"],
+                                        "genres": "|".join([str(g)
+                                                            for g in mr_movie_genre_dict[item_mapping[entity["uri"]]]
+                                                            ])
+                                        if item_mapping[entity["uri"]] in mr_movie_genre_dict else "None"})
+        mr_entities_new = pd.DataFrame.from_records(mr_entities_new)
+        mr_entities_new = mr_entities_new.sort_values(by=["idx"]).reset_index()
+        mr_entities_new.to_csv(os.path.join(self.data_path, "mindreader/processed/movies.csv"), index=False)
+
+        # save also the files containing the mappings
+        user_mapping_records = [{"old_idx": old_idx, "new_idx": new_idx} for old_idx, new_idx in user_mapping.items()]
+        item_mapping_records = [{"old_idx": old_idx, "new_idx": new_idx} for old_idx, new_idx in item_mapping.items()]
+        user_mapping_file = pd.DataFrame.from_records(user_mapping_records)
+        user_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/user_mapping.csv"), index=False)
+        item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
+        item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
 
     def create_mapping(self):
         """
