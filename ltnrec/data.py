@@ -541,9 +541,11 @@ class MovieLensMR:
             i += 1
 
         # create final dataset
-        dataset_ratings = [(user_mapping_ml[u], ml_to_new_idx[i], r) for u, i, r in ml_ratings]
-        dataset_ratings.extend([(user_mapping_mr[u], mr_to_new_idx[i], r) for u, i, r in mr_movie_ratings])
-        dataset_ratings = np.array(dataset_ratings)
+        dataset_ratings = [{"u_idx": user_mapping_ml[u], "i_idx": ml_to_new_idx[i], "rate": r}
+                           for u, i, r in ml_ratings]
+        dataset_ratings.extend([{"u_idx": user_mapping_mr[u], "i_idx": mr_to_new_idx[i], "rate": r}
+                                for u, i, r in mr_movie_ratings])
+        dataset_ratings = pd.DataFrame.from_records(dataset_ratings)
 
         # we need to associate each movie to its genres
         # in the union we need to use also the genres of MovieLens-100k, since we have some movies for which we do not
@@ -627,3 +629,26 @@ class MovieLensMR:
         train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
 
         return train, validation, test
+
+    @staticmethod
+    def get_fusion_folds(train_set, movie_mapping, user_mapping, ml_val, ml_test):
+        """
+        It constructs the train, validation, and test set for the fusion between ml-100k and MindReader datasets.
+        It takes as input the validation set and test set of ml-100k in such a way to find the same ratings in the
+        fusion dataset. We want the validation and test sets among the datasets to be identical since we need to
+        test whether the fusion provides improvements w.r.t. ml-100k alone.
+
+        The movie and user mapping are required to find the same triples in the fusion dataset, since it uses a
+        different indexing w.r.t. to ml-100k.
+        """
+        # fetch correct indexes for the validation set of the fusion dataset
+        fusion_val = np.array([[[user_mapping[u], movie_mapping[i]] for u, i in user] for user in ml_val])
+        # fetch correct indexes for the test set of the fusion dataset
+        fusion_test = np.array([[[user_mapping[u], movie_mapping[i]] for u, i in user] for user in ml_test])
+        # create training set by removing the validation/test positive movie ratings
+        to_remove = fusion_val[:, -1]
+        to_remove = np.concatenate((to_remove, fusion_test[:, -1]), axis=0).tolist()
+        train_set = train_set.to_dict("records")
+        fusion_train = np.array([[rating["u_idx"], rating["i_idx"], rating["rate"]]
+                                for rating in train_set if [rating["u_idx"], rating["i_idx"]] not in to_remove])
+        return fusion_train, fusion_val, fusion_test
