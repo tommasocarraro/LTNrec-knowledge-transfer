@@ -36,7 +36,6 @@ class TrainingDataLoaderLTN:
             end_idx = min(start_idx + self.batch_size, n)
             data = self.data[idxlist[start_idx:end_idx]]
             ratings = data[:, -1]
-            ratings[ratings == -1] = 0
 
             yield ltn.Variable('users', torch.tensor(data[:, 0]), add_batch_dim=False), \
                   ltn.Variable('items', torch.tensor(data[:, 1]), add_batch_dim=False), \

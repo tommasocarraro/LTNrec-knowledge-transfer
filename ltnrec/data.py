@@ -1,24 +1,25 @@
-import copy
-import json
 import pandas as pd
 import os
 import numpy as np
-import sys
-import string
-import unidecode
 from fuzzywuzzy import fuzz
-from collections import Counter
 import random
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
 
 
-# todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un match inutile perche' non abbiamo un test set e nemmeno una ground truth per quei film
-# todo bisognerebbe discutere se possano essere comunque utili con la scusa dei generi, magari quelli propogano informazione, pero' non avendo quei film dei rating, l'informazione si propaga solo attraverso il LikesGenre appreso
+# todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un
+#  match inutile perche' non abbiamo un test set e nemmeno una ground truth per quei film
+# todo bisognerebbe discutere se possano essere comunque utili con la scusa dei generi, magari quelli propogano
+#  informazione, pero' non avendo quei film dei rating, l'informazione si propaga solo attraverso il LikesGenre appreso
 # todo discutere di questa cosa con Luciano e Alessandro
-# todo moltissimi film su mindreader non hanno ratings o hanno solo ratings unknown, cosa posso fare? -> possono essere usati come cold start in casi futuri, pero' non ho rating su quelli e quindi non posso fare dei test set -> per ora li ho eliminati tutti
+# todo moltissimi film su mindreader non hanno ratings o hanno solo ratings unknown, cosa posso fare? ->
+#  possono essere usati come cold start in casi futuri, pero' non ho rating su quelli e quindi non posso fare dei
+#  test set -> per ora li ho eliminati tutti
 # todo il problema e' che molti di questi facevano parte dell'intersezione tra i due dataset
-# todo osservazione interessante: alcuni film non hanno ratings, potrebbero essere trattati come dei casi di cold-start in futuro, e' che non li puoi valutare
-# todo per simulare il cold-start si possono prendere tutti i rating di un film e metterli in test, in modo tale che durante il training non ci siano piu' rating per quel film
+# todo osservazione interessante: alcuni film non hanno ratings, potrebbero essere trattati come dei casi di
+#  cold-start in futuro, e' che non li puoi valutare
+# todo per simulare il cold-start si possono prendere tutti i rating di un film e metterli in test, in modo tale che
+#  durante il training non ci siano piu' rating per quel film, magari non tutti ma una grande percentuale, soprattutto
+#  per gli utenti con piu' ratings
 
 
 def send_query(query):
@@ -596,6 +597,8 @@ class MovieLensMR:
         # set seed
         random.seed(seed)
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
+        n_users = ratings[0].nunique()
+        n_items = ratings[1].nunique()
         # group by user idx
         groups = ratings.groupby(by=[0])
         # get set of movie indexes
@@ -628,7 +631,7 @@ class MovieLensMR:
         train = ratings.to_dict("records")
         train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
 
-        return train, validation, test
+        return train, validation, test, n_users, n_items
 
     @staticmethod
     def get_fusion_folds(train_set, movie_mapping, user_mapping, ml_val, ml_test):
@@ -648,7 +651,9 @@ class MovieLensMR:
         # create training set by removing the validation/test positive movie ratings
         to_remove = fusion_val[:, -1]
         to_remove = np.concatenate((to_remove, fusion_test[:, -1]), axis=0).tolist()
-        train_set = train_set.to_dict("records")
+        train_set_dict = train_set.to_dict("records")
         fusion_train = np.array([[rating["u_idx"], rating["i_idx"], rating["rate"]]
-                                for rating in train_set if [rating["u_idx"], rating["i_idx"]] not in to_remove])
-        return fusion_train, fusion_val, fusion_test
+                                for rating in train_set_dict if [rating["u_idx"], rating["i_idx"]] not in to_remove])
+        # todo ricordardi che quando ci sono anche i generi, posso avere utenti mancanti qui, perche' ho alcuni che
+        #  votano solo generi
+        return fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(), train_set["i_idx"].nunique()
