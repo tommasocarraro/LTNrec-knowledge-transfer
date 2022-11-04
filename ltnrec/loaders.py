@@ -1,6 +1,13 @@
 import numpy as np
 import torch
 import ltn
+# todo fare un loader che fornisce anche i rating sui generi
+# todo fare matrix factorization tra user e genre, basta aggiungere i fattori latenti dei generi in coda a
+#  quelli dei film -> i generi sono diversi dai film, quindi non capisco perche' dovrebbero stare assieme
+# todo usare one-hot per i generi e usare una rete che predice lo score
+# todo creare un val set anche per i generi
+# todo aggiungere la formula 2 e vedere se porta a miglioramenti, sopratutto sui casi di cold start
+# todo provare a rendere piu' sparso ml-100k e far vedere che i rating di mindreader aiutano
 
 
 class TrainingDataLoaderLTN:

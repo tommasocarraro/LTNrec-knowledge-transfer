@@ -561,8 +561,8 @@ class MovieLensMR:
 
         # now, we need to associate each user to the genres she likes or dislikes - this info is only on MindReader
         # get ratings of users of MindReader for the genres
-        mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])
-                                     for rating in self.mr_genre_ratings])
+        mr_genre_ratings = [(rating["u_idx"], rating["g_idx"], rating["rate"])
+                            for rating in self.mr_genre_ratings]
         # this dict contains the genres that each user likes and the genres that each user dislikes
         dataset_user_to_genres = {}
         for u, g, r in mr_genre_ratings:
@@ -578,8 +578,11 @@ class MovieLensMR:
                 else:
                     dataset_user_to_genres[user_mapping_mr[u]]["dislikes"].append(g)
 
-        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, ml_to_new_idx, mr_to_new_idx, \
-               user_mapping_ml, user_mapping_mr
+        # get genre_ratings as numpy
+        mr_genre_ratings = np.array([(user_mapping_mr[u], g, r) for u, g, r in mr_genre_ratings])
+
+        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, mr_genre_ratings, ml_to_new_idx, \
+               mr_to_new_idx, user_mapping_ml, user_mapping_mr
 
     def get_ml100k_folds(self, seed):
         """
@@ -634,7 +637,7 @@ class MovieLensMR:
         return train, validation, test, n_users, n_items
 
     @staticmethod
-    def get_fusion_folds(train_set, movie_mapping, user_mapping, ml_val, ml_test):
+    def get_fusion_folds(train_set, movie_mapping, user_mapping, ml_val, ml_test, genre_ratings=None):
         """
         It constructs the train, validation, and test set for the fusion between ml-100k and MindReader datasets.
         It takes as input the validation set and test set of ml-100k in such a way to find the same ratings in the
@@ -643,6 +646,10 @@ class MovieLensMR:
 
         The movie and user mapping are required to find the same triples in the fusion dataset, since it uses a
         different indexing w.r.t. to ml-100k.
+
+        If parameter `with_genres` is different from None (np.array of genre ratings is given), the function returns
+        also a np.array containing the ratings for the genres. Take into account that since some users have only
+        rated genres, the number of users between the two configurations will be different.
         """
         # fetch correct indexes for the validation set of the fusion dataset
         fusion_val = np.array([[[user_mapping[u], movie_mapping[i]] for u, i in user] for user in ml_val])
@@ -654,6 +661,13 @@ class MovieLensMR:
         train_set_dict = train_set.to_dict("records")
         fusion_train = np.array([[rating["u_idx"], rating["i_idx"], rating["rate"]]
                                 for rating in train_set_dict if [rating["u_idx"], rating["i_idx"]] not in to_remove])
-        # todo ricordardi che quando ci sono anche i generi, posso avere utenti mancanti qui, perche' ho alcuni che
-        #  votano solo generi
+        if genre_ratings is not None:
+            n_users = len(set(train_set["u_idx"].unique()) | set(genre_ratings[:, 0]))
+            n_items = train_set["i_idx"].nunique() + len(set(genre_ratings[:, 1]))  # we consider genres as items
+            n_movies = train_set["i_idx"].nunique()
+            # move the genre indexes of the number of movies in the dataset -> the genre embeddings will be the last
+            # in the embedding tensor
+            genre_ratings[:, 1] += n_movies
+            return np.concatenate([fusion_train, genre_ratings], axis=0), fusion_val, fusion_test, n_users, n_items
+
         return fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(), train_set["i_idx"].nunique()
