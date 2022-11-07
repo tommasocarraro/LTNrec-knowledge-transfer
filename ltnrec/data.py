@@ -584,7 +584,7 @@ class MovieLensMR:
         return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, mr_genre_ratings, ml_to_new_idx, \
                mr_to_new_idx, user_mapping_ml, user_mapping_mr
 
-    def get_ml100k_folds(self, seed):
+    def get_ml100k_folds(self, seed, mode=None):
         """
         Creates and returns the training, validation, and test set of the MovieLens-100k dataset.
 
@@ -596,6 +596,16 @@ class MovieLensMR:
         The validation set is constructed in the same way, starting from the remaining rating in the dataset.
 
         The seed parameter is used for reproducibility of experiments.
+
+        The mode parameter is used to control the selection of candidate test movies.
+        If mode is None, a random positive movie for each user is held out for validation and test, independently from
+        its presence in the MovieLens or the fusion dataset.
+        If mode is equal to "only-ml", the candidate test movies are randomly sampled from the set of movies that are
+        present only in the MovieLens dataset and not also in the MindReader dataset. This mode is used to see how the
+        knowledge transfer technique works in challenging scenarios.
+        If mode is equal to "only-fusion", the candidate test movies are randomly sampled for the set of movies that are
+        present only in the intersection between MovieLens and MindReader. Higher scores are expected for these movies
+        since the intersection is where the knowledge is easily transferred between the two datasets.
         """
         # set seed
         random.seed(seed)
@@ -611,10 +621,21 @@ class MovieLensMR:
         for user_idx, group in groups:
             # positive ratings for the user
             group_pos = group[group[2] == 1]
+            # filter group_pos based on selected mode
+            if mode == "only_ml":
+                # remove from group_pos all the positive ratings which belong to the fusion dataset (just ml movies)
+                group_pos = group_pos[~group_pos[1].isin(self.ml_to_mr)]
+            if mode == "only_fusion":
+                # remove from group_pos all the positive ratings which do not belong to the fusion
+                # dataset (just fusion movies)
+                group_pos = group_pos[group_pos[1].isin(self.ml_to_mr)]
             # check if it is possible to sample
             if len(group_pos):
                 # take one random positive rating for test and one for validation
-                sampled_pos = group_pos.sample(n=2, random_state=seed)
+                if len(group_pos) >= 2:
+                    sampled_pos = group_pos.sample(n=2, random_state=seed)
+                else:
+                    sampled_pos = group_pos.sample(n=1, random_state=seed)
                 # remove sampled ratings from the dataset
                 ratings.drop(sampled_pos.index, inplace=True)
                 sampled_pos = list(sampled_pos[1])
@@ -623,9 +644,10 @@ class MovieLensMR:
                 # take 100 randomly sampled negative (not seen by the user) movies for test and validation
                 not_seen = movies - set(seen_without_test[1])
                 neg_movies_test = random.sample(not_seen, 100)
-                neg_movies_val = random.sample(not_seen, 100)
-                validation.append([[user_idx, item] for item in neg_movies_val + [sampled_pos[0]]])
-                test.append([[user_idx, item] for item in neg_movies_test + [sampled_pos[1]]])
+                test.append([[user_idx, item] for item in neg_movies_test + [sampled_pos[0]]])
+                if len(group_pos) >= 2:
+                    neg_movies_val = random.sample(not_seen, 100)
+                    validation.append([[user_idx, item] for item in neg_movies_val + [sampled_pos[1]]])
 
         validation = np.array(validation)
         test = np.array(test)
@@ -667,7 +689,7 @@ class MovieLensMR:
             n_movies = train_set["i_idx"].nunique()
             # move the genre indexes of the number of movies in the dataset -> the genre embeddings will be the last
             # in the embedding tensor
-            genre_ratings[:, 1] += n_movies
-            return np.concatenate([fusion_train, genre_ratings], axis=0), fusion_val, fusion_test, n_users, n_items
+            new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
+            return np.concatenate([fusion_train, new_genre_ratings], axis=0), fusion_val, fusion_test, n_users, n_items
 
         return fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(), train_set["i_idx"].nunique()
