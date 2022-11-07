@@ -1,3 +1,5 @@
+import torch
+import numpy as np
 from ltnrec.data import MovieLensMR
 from ltnrec.loaders import ValDataLoader, TrainingDataLoaderLTN
 from ltnrec.models import MatrixFactorization, LTNTrainerMF
@@ -28,6 +30,8 @@ tr_loader_ml = TrainingDataLoaderLTN(ml_tr, 256)
 tr_loader_fusion = TrainingDataLoaderLTN(fusion_train, 256)
 tr_loader_fusion_genres = TrainingDataLoaderLTN(fusion_genres_train, 256)
 # create MF models
+torch.manual_seed(123)
+np.random.seed(123)
 mf_model_ml = MatrixFactorization(ml_n_users, ml_n_items, 1, biased=True)
 mf_model_fusion = MatrixFactorization(fusion_n_users, fusion_n_items, 1, biased=True)
 mf_model_fusion_genres = MatrixFactorization(fusion_genres_n_users, fusion_genres_n_items, 1, biased=True)
