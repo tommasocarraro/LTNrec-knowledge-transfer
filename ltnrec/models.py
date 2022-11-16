@@ -241,3 +241,46 @@ class LTNTrainerMF(MFTrainer):
             train_loss += train_sat.item()
 
         return train_loss / len(train_loader)
+
+
+class LTNTrainerMFGenres(LTNTrainerMF):
+    """
+    Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function. In
+    addition, unlike the previous model, this LTN has an additional axiom in the loss function. This axiom serves as
+    a kind of regularization for the embeddings learned by the MF model. The axiom states that if a user dislikes a
+    movie genre, then if a movie has that genre, the user should dislike it.
+    The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
+    should be near 1 if the user likes the item, and near 0 if the user dislikes the item.
+    The closeness between the predictions of the Likes function and the ground truth provided by the dataset for the
+    training user-item pairs is obtained by maximizing the truth value of the predicate Sim. The predicate Sim takes
+    as input a predicted score and the ground truth, and returns a value in the range [0., 1.]. Higher the value,
+    higher the closeness between the predicted score and the ground truth.
+    """
+
+    def __init__(self, mf_model, optimizer, alpha, p):
+        """
+        Constructor of the trainer for the LTN with MF as base model.
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param alpha: coefficient of smooth equality predicate
+        :param p: hyper-parameter p for pMeanError of rule on genres
+        """
+        super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha)
+        self.p = p
+
+    def train_epoch(self, train_loader):
+        train_loss = 0.0
+        for batch_idx, ((u, i, r), (u_g, i_g, gt)) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            f1 = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r))
+            if u_g is not None:
+                f2 = self.Forall(ltn.diag(u_g, i_g, gt), self.Sim(self.Likes(u_g, i_g), gt), p=self.p)
+                train_sat = self.sat_agg(f1, f2)
+            else:
+                train_sat = f1.value
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += train_sat.item()
+
+        return train_loss / len(train_loader)

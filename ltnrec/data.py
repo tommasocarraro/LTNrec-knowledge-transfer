@@ -20,6 +20,28 @@ from SPARQLWrapper import SPARQLWrapper, JSON, POST
 # todo per simulare il cold-start si possono prendere tutti i rating di un film e metterli in test, in modo tale che
 #  durante il training non ci siano piu' rating per quel film, magari non tutti ma una grande percentuale, soprattutto
 #  per gli utenti con piu' ratings
+# todo la regola dei generi la forziamo solo per quelle triple in cui mi manca il Likes a destra, devo pescare dalle
+#  triple mancanti nel dataset e utilizzare quella regola. Forse bisogna anche fare in modo che gli item siano nello
+#  stesso batch? Non e' detto, e' da pensare
+# todo DUBBIO: se ci basiamo su un modello predetto di Likes per fare la seconda formula, secondo me potrebbe
+#  corrompere tutto. Non e' piu' una knowledge al 100% affidabile -> potrebbe fare casino e' quello che vogliamo
+#  verificare se la knowledge viene trasferita oppure no
+# todo rendere completi gli esperimenti aggiungendo anche le altre casistiche di dataset
+# todo anche se abbiamo creato i set di val e test cosi, e' comunque fuori distribuzione, perhce' il training ha una
+#  distribuzione diversa. Non capisco perche' non debba funzionare come avevo deciso di fare le cose io. Era comunque
+#  allenato su quegli utenti e item
+# todo e' corretto fare questa cosa? secondo me no, pero' senza farla e' ovvio che funziona peggio
+#  perche' probabilmente e' un fold su cui va male, restringersi solamente a movielens aiuta ad
+#  eliminare i film su cui ha molti dati e che potrebbero essere quindi anche i piu' popolari
+# todo La regola dei generi può fare anche ground truth correction. Non gli piace un genere ma su movielens gli piace
+#  un film con quel genere? Correggo
+# todo Forse dovrei forzare solo per i film su movielens la regola? Non penso cambi tanto forzarla dapertutto, anzi
+#  forse e' meglio, cosi inferiamo ancora meglio i buchi della matrice
+# todo bisognerebbe provare con la BPR loss
+# todo l'interfaccia del framework permette di utilizzare un qualsiasi metodo che utilizza degli indici, basta creare
+#  un metodo che si interfaccia in questo modo
+# todo creare il predicato hasGenre, che dati gli indici dei generi, li converte tra 0 e 18 e poi fornisce i valori
+#  richiesti
 
 
 def send_query(query):
@@ -180,7 +202,7 @@ class MovieLensMR:
             movie_genres = [genre for _, genre in row[6:].items()]
             movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
             ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)
-            if movie_genres_idx else "None"})
+                                          if movie_genres_idx else "None"})
 
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
@@ -563,6 +585,7 @@ class MovieLensMR:
         # get ratings of users of MindReader for the genres
         mr_genre_ratings = [(rating["u_idx"], rating["g_idx"], rating["rate"])
                             for rating in self.mr_genre_ratings]
+        # todo forse questo pezzetto di codice non serve piu', per ora teniamolo per sicurezza
         # this dict contains the genres that each user likes and the genres that each user dislikes
         dataset_user_to_genres = {}
         for u, g, r in mr_genre_ratings:
@@ -584,7 +607,56 @@ class MovieLensMR:
         return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, mr_genre_ratings, ml_to_new_idx, \
                mr_to_new_idx, user_mapping_ml, user_mapping_mr
 
-    def get_ml100k_folds(self, seed, mode=None):
+    def create_ml_mr_fusion_only_genres(self):
+        """
+        It creates the dataset that is the union between the movies of MovieLens-100k and the movies genres of
+        MindReader. We have ratings from users of MovieLens for movies and ratings from users of MindReader for movies
+        genres.
+
+        Only the most popular genres are taken into account, namely the genres appearing in the MovieLens-100k dataset.
+        The ratings on the other genres are not considered since they are sub-genres of the main genres.
+
+        The idea of this dataset is to test if the information about the genres (just this info) helps in improving the
+        accuracy on the MovieLens-100k.
+        It is a kind of knowledge transfer from MindReader to MovieLens-100k.
+        """
+        # take ml-100k ratings
+        ml_ratings = np.array([(rating[0], rating[1], rating[2]) for rating in self.ml_100_ratings])
+
+        # we need to associate each movie to its genres
+        # we use the information in MindReader for the movies in the joint set and the information of ml-100k for the
+        # others
+        # we construct the inverse indexing to get genres of MindReader for movies in ml-100k
+        mr_to_ml = {mr_idx: ml_idx for ml_idx, mr_idx in self.ml_to_mr.items()}
+        dataset_movie_to_genres = {mr_to_ml[movie["idx"]]: movie["genres"].split("|")
+                                   for movie in self.mr_movie_info if movie["idx"] in mr_to_ml}
+        dataset_movie_to_genres = dataset_movie_to_genres | {movie[0]: movie[2].split("|")
+                                                             for movie in self.ml_100_movie_info
+                                                             if movie[0] not in dataset_movie_to_genres}
+
+        # get genre ratings
+        mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])
+                                     for rating in self.mr_genre_ratings])
+        u = len(set(ml_ratings[:, 0]))
+        # map mr users to new indexes
+        user_mapping_mr = {}
+        for user in set(mr_genre_ratings[:, 0]):
+            if user not in user_mapping_mr:
+                user_mapping_mr[user] = u
+                u += 1
+
+        mr_genre_ratings = np.array([[user_mapping_mr[u], g, r] for u, g, r in mr_genre_ratings])
+
+        # this is used just because crate_fusion_folds needs this info
+        # there is not a new indexing for ml-100k users and movies
+        item_mapping_ml = {movie_idx: movie_idx for movie_idx in set(ml_ratings[:, 1])}
+        user_mapping_ml = {user_idx: user_idx for user_idx in set(ml_ratings[:, 0])}
+        # we need the ratings in the records format since create_fusion_folds requires this format
+        ml_ratings = pd.DataFrame.from_records([{"u_idx": u, "i_idx": i, "rate": r} for u, i, r in ml_ratings])
+
+        return ml_ratings, dataset_movie_to_genres, mr_genre_ratings, user_mapping_ml, item_mapping_ml, user_mapping_mr
+
+    def get_ml100k_folds(self, seed, mode=None, fair=True, n_neg=100):
         """
         Creates and returns the training, validation, and test set of the MovieLens-100k dataset.
 
@@ -606,6 +678,16 @@ class MovieLensMR:
         If mode is equal to "only-fusion", the candidate test movies are randomly sampled for the set of movies that are
         present only in the intersection between MovieLens and MindReader. Higher scores are expected for these movies
         since the intersection is where the knowledge is easily transferred between the two datasets.
+
+        The n_neg parameter is used to decide the number of random negative samples used to construct each
+        validation/test example. The higher the number the more challenging will be for the model to put
+        the target item in the top-N positions of the ranking.
+
+        The fair parameter is used when only_ml or only_fusion are used. If fair is set to True, then the only_ml will
+        produce negative items which are only present in the ml-100k dataset and not in MindReader. If it is False, it
+        will produce negative items that could be also in the joint movies. The same is valid for only_fusion. If it is
+        True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k and the
+        intersection.
         """
         # set seed
         random.seed(seed)
@@ -615,38 +697,47 @@ class MovieLensMR:
         # group by user idx
         groups = ratings.groupby(by=[0])
         # get set of movie indexes
-        movies = set(ratings[1].unique())
+        ml_movies = set(ratings[1].unique())
+        only_ml_movies = ml_movies - set(self.ml_to_mr.keys())
         validation = []
         test = []
         for user_idx, group in groups:
+            # take n_neg randomly sampled negative (not seen by the user) movies for test and validation
+            not_seen = ml_movies - set(group[1])
             # positive ratings for the user
             group_pos = group[group[2] == 1]
             # filter group_pos based on selected mode
             if mode == "only_ml":
                 # remove from group_pos all the positive ratings which belong to the fusion dataset (just ml movies)
                 group_pos = group_pos[~group_pos[1].isin(self.ml_to_mr)]
+                if fair:
+                    # remove from negative movies the movies in the joint set
+                    not_seen -= set(self.ml_to_mr.keys())
             if mode == "only_fusion":
                 # remove from group_pos all the positive ratings which do not belong to the fusion
                 # dataset (just fusion movies)
                 group_pos = group_pos[group_pos[1].isin(self.ml_to_mr)]
-            # check if it is possible to sample
-            if len(group_pos):
+                if fair:
+                    # remove from negative movies the movies which are not in the joint set
+                    not_seen -= only_ml_movies
+            # check if it is possible to sample - leave at least one positive rating in the training set
+            if len(group_pos) > 1:
                 # take one random positive rating for test and one for validation
-                if len(group_pos) >= 2:
+                if len(group_pos) > 2:
                     sampled_pos = group_pos.sample(n=2, random_state=seed)
                 else:
                     sampled_pos = group_pos.sample(n=1, random_state=seed)
                 # remove sampled ratings from the dataset
                 ratings.drop(sampled_pos.index, inplace=True)
                 sampled_pos = list(sampled_pos[1])
-                # remove sampled ratings from the group
-                seen_without_test = group_pos[~group_pos[1].isin(sampled_pos)]
-                # take 100 randomly sampled negative (not seen by the user) movies for test and validation
-                not_seen = movies - set(seen_without_test[1])
-                neg_movies_test = random.sample(not_seen, 100)
+                # we cannot increase n_neg too much since we do not have a lot of negative movies when the mode is
+                # set to only_fusion
+                assert len(not_seen) > n_neg, "Problem: not_seen is %d and n_neg %d, set a lower " \
+                                              "number of n_neg" % (len(not_seen), n_neg)
+                neg_movies_test = random.sample(not_seen, n_neg)
                 test.append([[user_idx, item] for item in neg_movies_test + [sampled_pos[0]]])
-                if len(group_pos) >= 2:
-                    neg_movies_val = random.sample(not_seen, 100)
+                if len(group_pos) > 2:
+                    neg_movies_val = random.sample(not_seen, n_neg)
                     validation.append([[user_idx, item] for item in neg_movies_val + [sampled_pos[1]]])
 
         validation = np.array(validation)
