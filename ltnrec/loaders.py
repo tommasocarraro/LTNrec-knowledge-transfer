@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 import ltn
-from scipy.sparse import csr_matrix
 # todo fare un loader che fornisce anche i rating sui generi
 # todo fare matrix factorization tra user e genre, basta aggiungere i fattori latenti dei generi in coda a
 #  quelli dei film -> i generi sono diversi dai film, quindi non capisco perche' dovrebbero stare assieme
@@ -66,7 +65,7 @@ class TrainingDataLoaderLTNGenres:
                  n_users,
                  n_items,
                  n_genres,
-                 movie_genres,
+                 # movie_genres,
                  batch_size=1,
                  shuffle=True):
         """
@@ -76,7 +75,6 @@ class TrainingDataLoaderLTNGenres:
         :param n_items: number of items in the dataset - this cannot be computed from training ratings since the
         procedure which creates the folds could have moved the only rating of one item in test set
         :param n_genres: number of movie genres in the dataset
-        :param movie_genres: dictionary containing for each movie the genres to which it belongs to
         :param batch_size: batch size for the training of the model
         :param shuffle: whether to shuffle data during training or not
         """
@@ -86,14 +84,14 @@ class TrainingDataLoaderLTNGenres:
         self.n_users = n_users
         self.n_items = n_items
         self.n_genres = n_genres
-        self.movie_genres = self.get_movie_genre_matrix(movie_genres)
+        # self.movie_genres = self.get_movie_genre_matrix(movie_genres)
 
-    def get_movie_genre_matrix(self, movie_genres):
-        movie_genre_pairs = np.array([[movie, int(genre)] for movie in movie_genres
-                                      for genre in movie_genres[movie]
-                                      if genre != 'None'])
-        return csr_matrix((np.ones(len(movie_genre_pairs)), (movie_genre_pairs[:, 0], movie_genre_pairs[:, 1])),
-                          shape=(self.n_items, self.n_genres))
+    # def get_movie_genre_matrix(self, movie_genres):
+    #     movie_genre_pairs = np.array([[movie, int(genre)] for movie in movie_genres
+    #                                   for genre in movie_genres[movie]
+    #                                   if genre != 'None'])
+    #     return csr_matrix((np.ones(len(movie_genre_pairs)), (movie_genre_pairs[:, 0], movie_genre_pairs[:, 1])),
+    #                       shape=(self.n_items, self.n_genres))
 
     def __len__(self):
         return int(np.ceil(self.movie_ratings.shape[0] / self.batch_size))
@@ -108,20 +106,28 @@ class TrainingDataLoaderLTNGenres:
             end_idx = min(start_idx + self.batch_size, n)
             data = self.movie_ratings[idxlist[start_idx:end_idx]]
             # get random user-item pairs - the probability to sample seen pairs, namely pairs in the dataset, it is
-            # really low due to sparsity of dataset
-            # even if we have a small number of sampled seen pairs, it does not matter
+            # really low due to the sparsity of the dataset
+            # even if we have a small number of sampled seen pairs it does not matter since that pairs act as a kind
+            # of regularization for the target ratings, in fact they could correct wrong ground truth
             # this is the most efficient way to sample unseen pairs
             u_idx = np.random.choice(self.n_users, size=self.batch_size)
             i_idx = np.random.choice(self.n_items, size=self.batch_size)
-            unseen_pairs = np.concatenate([u_idx[:, np.newaxis], i_idx[:, np.newaxis]], axis=1)
-            item_to_genre = self.movie_genres[i_idx]
+            # unseen_pairs = np.concatenate([u_idx[:, np.newaxis], i_idx[:, np.newaxis]], axis=1)
+            # item_to_genre = self.movie_genres[i_idx]
             # remove seen pairs from randomly sampled pairs
             # this is not efficient, hence removed
             # unseen_pairs = np.array([pair for pair in unseen_pairs if pair not in self.movie_ratings_list])
+            # todo per aumentare il tempo di esecuzione, faccio sample anche dei generi
 
-            yield (ltn.Variable('users', torch.tensor(data[:, 0]), add_batch_dim=False),
-                   ltn.Variable('items', torch.tensor(data[:, 1]), add_batch_dim=False),
-                   ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False))
+            yield (ltn.Variable('users_phi1', torch.tensor(data[:, 0]), add_batch_dim=False),
+                   ltn.Variable('items_phi1', torch.tensor(data[:, 1]), add_batch_dim=False),
+                   ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)), \
+                  (ltn.Variable('users_phi2', torch.tensor(u_idx), add_batch_dim=False),
+                   ltn.Variable('items_phi2', torch.tensor(i_idx), add_batch_dim=False),
+                   ltn.Variable('genres', torch.randint(0, 18, size=(5,)) + self.n_items, add_batch_dim=False),  # torch.arange(self.n_genres)
+                   ltn.Constant(torch.tensor(0.)))
+                   # ltn.Constant(torch.zeros(self.batch_size * self.n_genres)),
+                   # ltn.Constant(torch.zeros(self.batch_size)))
 
 
 class TrainingDataLoader:

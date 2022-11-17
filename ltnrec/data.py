@@ -4,6 +4,7 @@ import numpy as np
 from fuzzywuzzy import fuzz
 import random
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
+from scipy.sparse import csr_matrix
 
 
 # todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un
@@ -538,18 +539,18 @@ class MovieLensMR:
         # create indexing for movies which are not shared
         ml_ratings = np.array([(rating[0], rating[1], rating[2]) for rating in self.ml_100_ratings])
         # create indexes for ml-100k movie not in the joint set
-        i = len(self.ml_to_mr)
+        j = len(self.ml_to_mr)
         for movie in self.ml_100_movie_info:
             if movie[0] not in self.ml_to_mr:
-                ml_to_new_idx[movie[0]] = i
-                i += 1
+                ml_to_new_idx[movie[0]] = j
+                j += 1
         # create indexes for ml-100k movie not in the joint set
         mr_movie_ratings = np.array([(rating["u_idx"], rating["i_idx"], rating["rate"])
                                      for rating in self.mr_movie_ratings])
         for movie in self.mr_movie_info:
             if movie["idx"] not in self.ml_to_mr.values():
-                mr_to_new_idx[movie["idx"]] = i
-                i += 1
+                mr_to_new_idx[movie["idx"]] = j
+                j += 1
 
         # create unique user indexing
         user_mapping_ml = {}
@@ -575,11 +576,18 @@ class MovieLensMR:
         # have the information in MindReader
         # we use only the most common genres, to reduce sparsity (genres of MovieLens-100k)
         # for the joint set of movies, we use the genres in MindReader
+
         dataset_movie_to_genres = {mr_to_new_idx[movie["idx"]]: movie["genres"].split("|")
                                    for movie in self.mr_movie_info}
         dataset_movie_to_genres = dataset_movie_to_genres | {ml_to_new_idx[movie[0]]: movie[2].split("|")
                                                              for movie in self.ml_100_movie_info
                                                              if ml_to_new_idx[movie[0]] not in dataset_movie_to_genres}
+        dataset_movie_to_genres = np.array([[movie, int(genre)] for movie in dataset_movie_to_genres
+                                           for genre in dataset_movie_to_genres[movie]
+                                           if genre != 'None'])
+        dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
+                                              (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
+                                             shape=(j, len(self.genres)))
 
         # now, we need to associate each user to the genres she likes or dislikes - this info is only on MindReader
         # get ratings of users of MindReader for the genres
@@ -628,11 +636,18 @@ class MovieLensMR:
         # others
         # we construct the inverse indexing to get genres of MindReader for movies in ml-100k
         mr_to_ml = {mr_idx: ml_idx for ml_idx, mr_idx in self.ml_to_mr.items()}
+
         dataset_movie_to_genres = {mr_to_ml[movie["idx"]]: movie["genres"].split("|")
                                    for movie in self.mr_movie_info if movie["idx"] in mr_to_ml}
         dataset_movie_to_genres = dataset_movie_to_genres | {movie[0]: movie[2].split("|")
                                                              for movie in self.ml_100_movie_info
                                                              if movie[0] not in dataset_movie_to_genres}
+        dataset_movie_to_genres = np.array([[movie, int(genre)] for movie in dataset_movie_to_genres
+                                            for genre in dataset_movie_to_genres[movie]
+                                            if genre != 'None'])
+        dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
+                                              (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
+                                             shape=(len(np.unique(ml_ratings[:, 1])), len(self.genres)))
 
         # get genre ratings
         mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])

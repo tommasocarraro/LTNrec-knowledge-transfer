@@ -257,27 +257,35 @@ class LTNTrainerMFGenres(LTNTrainerMF):
     higher the closeness between the predicted score and the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, p):
+    def __init__(self, mf_model, optimizer, alpha, p, n_movies, item_genres_matrix):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
         :param alpha: coefficient of smooth equality predicate
         :param p: hyper-parameter p for pMeanError of rule on genres
+        :param n_movies: number of movies in the dataset
+        :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
+        belongs to the genre
         """
         super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha)
+        item_genres_matrix = torch.tensor(item_genres_matrix.todense())
+        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
+        self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
+        self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
+        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx - n_movies])
         self.p = p
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
-        for batch_idx, ((u, i, r), (u_g, i_g, gt)) in enumerate(train_loader):
+        for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            f1 = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r))
-            if u_g is not None:
-                f2 = self.Forall(ltn.diag(u_g, i_g, gt), self.Sim(self.Likes(u_g, i_g), gt), p=self.p)
-                train_sat = self.sat_agg(f1, f2)
-            else:
-                train_sat = f1.value
+            f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r))
+            f2 = self.Forall(ltn.diag(u2, i2),
+                             self.Forall(g, self.Implies(
+                                 self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
+                                 self.Sim(self.Likes(u2, i2), r_)), p=self.p), p=self.p)
+            train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()

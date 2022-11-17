@@ -1,4 +1,4 @@
-from ltnrec.utils import set_seed, train_standard_mf, train_ltn_mf
+from ltnrec.utils import set_seed, train_standard_mf, train_ltn_mf, train_ltn_mf_genres
 from ltnrec.data import MovieLensMR
 
 # todo vedere se su MindReader ho solo i generi, mi serve pero' la regola dei generi, senza quella la informazione
@@ -20,9 +20,9 @@ seed = 123
 # load dataset class
 data = MovieLensMR("./datasets")
 # get fusion dataset
-ratings, _, _, genre_ratings, ml_to_new_idx, _, user_mapping_ml, _ = data.create_ml_mr_fusion()
+ratings, movie_genres, _, genre_ratings, ml_to_new_idx, _, user_mapping_ml, _ = data.create_ml_mr_fusion()
 # get fusion dataset only genres
-g_ratings, _, g_genre_ratings, g_user_mapping, g_item_mapping, _ = data.create_ml_mr_fusion_only_genres()
+g_ratings, g_movie_genres, g_genre_ratings, g_user_mapping, g_item_mapping, _ = data.create_ml_mr_fusion_only_genres()
 # begin experiment
 for mode in [None, "only_ml", "only_fusion"]:  # None, "only_ml", "only_fusion"
     set_seed(seed)
@@ -51,8 +51,12 @@ for mode in [None, "only_ml", "only_fusion"]:  # None, "only_ml", "only_fusion"
                       fusion_val, fusion_test, 256, 512, 0.001, 0.0001, seed)
     train_ltn_mf(fusion_genres_n_users, fusion_genres_n_items, 1, True, fusion_genres_train, fusion_val,
                  fusion_test, 256, 512, 0.001, 0.0001, 0.05, seed)
+    train_ltn_mf_genres(fusion_genres_n_users, fusion_genres_n_items, len(data.genres), movie_genres, 1, True,
+                        fusion_genres_train, fusion_val, fusion_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022)
     print("Training on ratings of ml-100k and genre ratings of MindReader")
     train_standard_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, 1, True, fusion_g_genres_train,
                       ml_val, ml_test, 256, 512, 0.001, 0.0001, seed)
     train_ltn_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, 1, True, fusion_g_genres_train, ml_val,
                  ml_test, 256, 512, 0.001, 0.0001, 0.05, seed)
+    train_ltn_mf_genres(fusion_g_genres_n_users, fusion_g_genres_n_items, len(data.genres), g_movie_genres, 1, True,
+                        fusion_g_genres_train, ml_val, ml_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022)
