@@ -24,14 +24,23 @@ ratings, movie_genres, _, genre_ratings, ml_to_new_idx, _, user_mapping_ml, _ = 
 # get fusion dataset only genres
 g_ratings, g_movie_genres, g_genre_ratings, g_user_mapping, g_item_mapping, _ = data.create_ml_mr_fusion_only_genres()
 # begin experiment
-for mode in [None, "only_ml", "only_fusion"]:  # None, "only_ml", "only_fusion"
+for mode in ["only_fusion"]:  # None, "only_ml", "only_fusion"
     set_seed(seed)
     # get ml-100k dataset
     ml_tr, ml_val, ml_test, ml_n_users, ml_n_items = data.get_ml100k_folds(seed, mode=mode, n_neg=200)
+    if mode is None:
+        mode = "test on ml"
+    else:
+        if mode == "only_ml":
+            mode = "test on ml \\ mr"
+        else:
+            mode = "test on ml ∩ mr"
     print(mode if mode is not None else "random")
     print("Training on ratings of ml-100k")
-    train_standard_mf(ml_n_users, ml_n_items, 1, True, ml_tr, ml_val, ml_test, 256, 512, 0.001, 0.0001, seed)
-    train_ltn_mf(ml_n_users, ml_n_items, 1, True, ml_tr, ml_val, ml_test, 256, 512, 0.001, 0.0001, 0.05, seed)
+    train_standard_mf(ml_n_users, ml_n_items, 1, True, ml_tr, ml_val, ml_test, 256, 512, 0.001, 0.0001, seed,
+                      "%s-%s-%s" % (mode, "training on ml ratings", "standard MF"), "exp1")
+    train_ltn_mf(ml_n_users, ml_n_items, 1, True, ml_tr, ml_val, ml_test, 256, 512, 0.001, 0.0001, 0.05, seed,
+                 "%s-%s-%s" % (mode, "training on ml ratings", "MF with LTN"), "exp1")
     # get fusion folds based on ml-100k folds
     fusion_train, fusion_val, fusion_test, fusion_n_users, fusion_n_items = \
         data.get_fusion_folds(ratings, ml_to_new_idx, user_mapping_ml, ml_val, ml_test)
@@ -43,20 +52,34 @@ for mode in [None, "only_ml", "only_fusion"]:  # None, "only_ml", "only_fusion"
         data.get_fusion_folds(g_ratings, g_item_mapping, g_user_mapping, ml_val, ml_test, g_genre_ratings)
     print("Training on entire dataset without ratings on genres")
     train_standard_mf(fusion_n_users, fusion_n_items, 1, True, fusion_train, fusion_val, fusion_test, 256,
-                      512, 0.001, 0.0001, seed)
+                      512, 0.001, 0.0001, seed, "%s-%s-%s" % (mode, "training on ml ratings ∪ mr ratings "
+                                                                    "(no mr genre ratings)",
+                                                              "standard MF"), "exp1")
     train_ltn_mf(fusion_n_users, fusion_n_items, 1, True, fusion_train, fusion_val, fusion_test, 256, 512,
-                 0.001, 0.0001, 0.05, seed)
+                 0.001, 0.0001, 0.05, seed, "%s-%s-%s" % (mode, "training on ml ratings ∪ mr ratings "
+                                                                "(no mr genre ratings)",
+                                                          "MF with LTN"), "exp1")
     print("Training on entire dataset with ratings on genres")
     train_standard_mf(fusion_genres_n_users, fusion_genres_n_items, 1, True, fusion_genres_train,
-                      fusion_val, fusion_test, 256, 512, 0.001, 0.0001, seed)
+                      fusion_val, fusion_test, 256, 512, 0.001, 0.0001, seed,
+                      "%s-%s-%s" % (mode, "training on ml ratings ∪ mr ratings (with mr genre ratings)", "standard MF"),
+                      "exp1")
     train_ltn_mf(fusion_genres_n_users, fusion_genres_n_items, 1, True, fusion_genres_train, fusion_val,
-                 fusion_test, 256, 512, 0.001, 0.0001, 0.05, seed)
+                 fusion_test, 256, 512, 0.001, 0.0001, 0.05, seed,
+                 "%s-%s-%s" % (mode, "training on ml ratings ∪ mr ratings (with mr genre ratings)", "MF with LTN"),
+                 "exp1")
     train_ltn_mf_genres(fusion_genres_n_users, fusion_genres_n_items, len(data.genres), movie_genres, 1, True,
-                        fusion_genres_train, fusion_val, fusion_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022)
+                        fusion_genres_train, fusion_val, fusion_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022,
+                        "%s-%s-%s" % (mode, "training on ml ratings ∪ mr ratings (with mr genre ratings)",
+                                      "MF with LTN (knowledge transfer)"), "exp1")
     print("Training on ratings of ml-100k and genre ratings of MindReader")
     train_standard_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, 1, True, fusion_g_genres_train,
-                      ml_val, ml_test, 256, 512, 0.001, 0.0001, seed)
+                      ml_val, ml_test, 256, 512, 0.001, 0.0001, seed,
+                      "%s-%s-%s" % (mode, "training on ml movie ratings & mr genre ratings", "standard MF"), "exp1")
     train_ltn_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, 1, True, fusion_g_genres_train, ml_val,
-                 ml_test, 256, 512, 0.001, 0.0001, 0.05, seed)
+                 ml_test, 256, 512, 0.001, 0.0001, 0.05, seed,
+                 "%s-%s-%s" % (mode, "training on ml movie ratings & mr genre ratings", "MF with LTN"), "exp1")
     train_ltn_mf_genres(fusion_g_genres_n_users, fusion_g_genres_n_items, len(data.genres), g_movie_genres, 1, True,
-                        fusion_g_genres_train, ml_val, ml_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022)
+                        fusion_g_genres_train, ml_val, ml_test, 256, 512, 0.001, 0.0001, 0.05, 2, 2022,
+                        "%s-%s-%s" % (mode, "training on ml movie ratings & mr genre ratings",
+                                      "MF with LTN (knowledge transfer)"), "exp1")
