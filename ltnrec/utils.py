@@ -83,11 +83,11 @@ def train_standard_mf(n_users, n_items, tr, val, test, test_metrics, seed, exper
     with open("./config/standard_mf.json") as json_file:
         config = json.load(json_file)
     set_seed(seed)
-    mf_model = MatrixFactorization(n_users, n_items, config.k, config.biased)
-    tr_loader = TrainingDataLoader(tr, config.tr_batch_size)
-    val_loader = ValDataLoader(val, config.val_batch_size)
-    test_loader = ValDataLoader(test, config.val_batch_size)
-    trainer = MFTrainer(mf_model, Adam(mf_model.parameters(), lr=config.lr, weight_decay=config.wd))
+    mf_model = MatrixFactorization(n_users, n_items, config['k'], config['biased'])
+    tr_loader = TrainingDataLoader(tr, config['tr_batch_size'])
+    val_loader = ValDataLoader(val, config['val_batch_size'])
+    test_loader = ValDataLoader(test, config['val_batch_size'])
+    trainer = MFTrainer(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']))
     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
 
 
@@ -98,12 +98,12 @@ def train_ltn_mf(n_users, n_items, tr, val, test, test_metrics, seed, experiment
     with open("./config/ltn_mf.json") as json_file:
         config = json.load(json_file)
     set_seed(seed)
-    mf_model = MatrixFactorization(n_users, n_items, config.k, config.biased)
-    tr_loader = TrainingDataLoaderLTN(tr, config.tr_batch_size)
-    val_loader = ValDataLoader(val, config.val_batch_size)
-    test_loader = ValDataLoader(test, config.val_batch_size)
-    trainer = LTNTrainerMF(mf_model, Adam(mf_model.parameters(), lr=config.lr, weight_decay=config.wd),
-                           alpha=config.alpha)
+    mf_model = MatrixFactorization(n_users, n_items, config['k'], config['biased'])
+    tr_loader = TrainingDataLoaderLTN(tr, config['tr_batch_size'])
+    val_loader = ValDataLoader(val, config['val_batch_size'])
+    test_loader = ValDataLoader(test, config['val_batch_size'])
+    trainer = LTNTrainerMF(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']),
+                           alpha=config['alpha'])
     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
 
 
@@ -116,14 +116,15 @@ def train_ltn_mf_genres(n_users, n_items, n_genres, movie_genres, tr, val, test,
     with open("./config/ltn_mf_genres.json") as json_file:
         config = json.load(json_file)
     set_seed(seed)
-    mf_model = MatrixFactorization(n_users, n_items, config.k, config.biased)
+    mf_model = MatrixFactorization(n_users, n_items, config['k'], config['biased'])
     # here, we pass n_items - n_genres because in this MF model the items include also the movie genres but
     # the loader needs to know the number of movies (items without genres)
-    tr_loader = TrainingDataLoaderLTNGenres(tr, n_users, n_items - n_genres, n_genres, config.tr_batch_size)
-    val_loader = ValDataLoader(val, config.val_batch_size)
-    test_loader = ValDataLoader(test, config.val_batch_size)
+    tr_loader = TrainingDataLoaderLTNGenres(tr, n_users, n_items - n_genres, n_genres, genre_sample_size=5,
+                                            batch_size=config['tr_batch_size'])
+    val_loader = ValDataLoader(val, config['val_batch_size'])
+    test_loader = ValDataLoader(test, config['val_batch_size'])
     # also the trainer needs to know the exact number of movies (n_items - n_genres)
-    trainer = LTNTrainerMFGenres(mf_model, Adam(mf_model.parameters(), lr=config.lr, weight_decay=config.wd),
-                                 alpha=config.alpha, p=config.p,
+    trainer = LTNTrainerMFGenres(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']),
+                                 alpha=config['alpha'], p=config['p'],
                                  n_movies=n_items - n_genres, item_genres_matrix=movie_genres)
     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
