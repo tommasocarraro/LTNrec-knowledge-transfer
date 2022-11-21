@@ -14,6 +14,8 @@ from ltnrec.data import MovieLensMR
 #  dell'informazione senza l'utilizzo della regola con LikesGenre (seconda regola) - fare anche un test set solo di
 #  intersezione
 # todo se uso solo i generi su mindreader, cosa succede quando passo a LikesGenre l'embedding in un utente che e' di ML?
+# todo con la formula avviene effettivo reasoning sui generi e questo aiuta un sacco il modello perche' l'ablation
+#  study lo dimostra (abbiamo un esperimento con lo stesso modello con e senza formula)
 
 # set seed
 seed = 123

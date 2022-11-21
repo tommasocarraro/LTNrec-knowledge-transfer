@@ -43,6 +43,8 @@ from scipy.sparse import csr_matrix
 #  un metodo che si interfaccia in questo modo
 # todo creare il predicato hasGenre, che dati gli indici dei generi, li converte tra 0 e 18 e poi fornisce i valori
 #  richiesti
+# todo forse ha senso che se a uno piace comedy horror, almeno mettiamo che gli piace il genere piu' alto nella
+#  gerarchia?
 
 
 def send_query(query):
@@ -64,27 +66,42 @@ def send_query(query):
 
 class MovieLensMR:
     """
-    Class that manages the dataset. The dataset is a union of the MovieLens-100k dataset and the MindReader dataset.
-    It is possible to create it in two different ways:
-    1. a match between the movies in MovieLens and the movies in MindReader is created and the union of the datasets is
-    taken. In this case, there will be 4,940 movies in the dataset;
-    2. a match between the movies in MovieLens and the movies in MindReader is created and the intersection of the
-    datasets is taken. In this case, there will be 1,682 movies in the dataset.
+    Class that manages the dataset. The dataset is a fusion of the MovieLens-100k dataset with the MindReader dataset.
 
-    The procedure unifies the indexes of the two datasets in the same range.
+    The dataset is created by finding a match between the movies of ml-100k and the movies of MindReader. After the
+    match is found, the movies in the joint set (matched movies) will share the same index in the final dataset.
+    Instead, for the movies that do not belong to the joint set a new index will be created, both for movies in
+    ml-100k and MindReader.
+    The users of the two datasets are disjoint. For these users a new indexing is created in such a way they live in the
+    same index space.
+    MindReader has also ratings for movie genres and other entities. The ratings on genres are added to the final
+    datasets.
+    MindReader specifies over 150 movie genres. To simplify the learning procedure, we kept only the movie genres which
+    are also on the ml-100k dataset. These are the most popular genres. The other genres were subsets of these genres.
+
+    The idea behind the creation of this dataset is to test whether the addition of ratings from other users and other
+    movies can help in reaching better results on the Top-N recommendation task. In particular, we are interested
+    in transferring knowledge from MindReader to ml-100k. This can be done with specific axioms implemented in Logic
+    Tensor Networks. The main idea is to learn a model to model genre preferences on the users of MindReader and then
+    use this model to infer such ratings for the ml-100k dataset. This model should help in obtaining better results
+    thanks to the use of a specific axiom in LTN.
     """
 
     def __init__(self, data_path):
         self.data_path = data_path
         self.check()
+        # these are the 18 genres of ml-100k - we keep these genres also for MindReader
         self.genres = ("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
                        "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
                        "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
                        "Western Film")
+        # process ml-100k
         if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv")):
             self.process_ml_100k()
+        # process MindReader
         if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv")):
             self.process_mr()
+        # save the files which are mostly used by the pre-processing procedure
         self.ml_100_movie_info = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"),
                                              encoding="iso-8859-1", header=None).to_dict("records")
         self.ml_100_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"),
@@ -95,6 +112,7 @@ class MovieLensMR:
                                                          "mindreader/processed/movie_ratings.csv")).to_dict("records")
         self.mr_genre_ratings = pd.read_csv(os.path.join(self.data_path,
                                                          "mindreader/processed/genre_ratings.csv")).to_dict("records")
+        # create the match between the movies of ml-100k and the movies of MindReader
         self.ml_to_mr = self.create_mapping()
 
     def check(self):
@@ -103,11 +121,13 @@ class MovieLensMR:
         1. entities: contains the entities (movies, genres, actors, ...) of the MindReader KG;
         2. ratings: contains the user-entity ratings of the MindReader dataset;
         3. triples: contains the relationships between the entities of the MindReader KG. For example, who is the actor
-        of the movie? Which is the genre? Which is the year? All this information is included in the triples file;
+        of the movie? Which is the genre? Which is the publication year? All this information is included in the 
+        triples file;
         4. u.data (MovieLens-100k): contains the user-item ratings of the MovieLens-100k dataset;
         5. u.item (MovieLens-100k): contains the content information of the movies in MovieLens-100k;
-        6. movies (MovieLens-latest): contains the content information of the movies in the MovieLens latest dataset;
-        7. links (MovieLens-latest): contains the links to iMDB for the movies in the dataset.
+        6. movies (MovieLens-latest): contains the content information of the movies in the MovieLens latest dataset. 
+        This dataset is used because it contains updated links to iMDB for some of the movies in the ml-100k dataset;
+        7. links (MovieLens-latest): contains the links to iMDB for the movies in the MovieLens-latest dataset.
         """
         assert os.path.exists(os.path.join(self.data_path, 'mindreader/entities.csv')), "entities.csv for MindReader " \
                                                                                         "is missing"
@@ -127,18 +147,20 @@ class MovieLensMR:
     def process_ml_100k(self, threshold=4):
         """
         It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
-        has rated multiple times the same movie.
-        It also recreates the indexing after these modifications have been done.
+        has rated multiple times the same movie (sometimes even with the same rating).
+        It also recreates the indexing after these modifications have been done, in such a way the indexes are 
+        in [0, n_movies].
         It creates new csv files without the duplicates, both u.data and u.item, with the new indexing.
 
-        :param threshold: a threshold used to create implicit feedbacks from the explicit feedbacks of ml-100k
+        :param threshold: a threshold used to create implicit feedbacks from the explicit feedbacks of ml-100k. Ratings
+        above the threshold are converted to 1, the others to 0.
         """
         # get MovieLens-100k movies
         ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
                                          encoding="iso-8859-1", header=None)
         ml_100_movies_file_dict = ml_100_movies_file.to_dict("records")
 
-        # for each title, we get the list of corresponding indexes
+        # for each title, we get the list of corresponding indexes (for some titles we have multiple indexes)
         ml_100_title_to_idx = {}
         for movie in ml_100_movies_file_dict:
             if movie[1] not in ml_100_title_to_idx:
@@ -152,7 +174,7 @@ class MovieLensMR:
         ml_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.data"), sep="\t", header=None)
         new_ratings = []
         for movie, idx in duplicates.items():
-            # create one unique index for the same movie with two different indexes
+            # create one unique index for the same movie with two different indexes (each movie has max two indexes)
             # we keep the first of the two indexes
             ml_ratings[1] = ml_ratings[1].replace(idx[1], idx[0])
             # delete record with second occurrence of the movie in the file containing movie information
@@ -161,7 +183,7 @@ class MovieLensMR:
             # ratings to the same index)
             groups = ml_ratings.groupby(by=[0, 1])
             for i, (_, group) in enumerate(groups):
-                if len(group) > 1:
+                if len(group) > 1:  # it means we have multiple ratings by the same user to the same item
                     # compute mean of the ratings
                     group[2] = group[2].mean()
                     # append new record to dataset
@@ -189,21 +211,27 @@ class MovieLensMR:
             rating[2] = 1 if rating[2] >= threshold else 0
 
         ml_ratings = pd.DataFrame.from_records(ml_ratings_dict)
-        # correct indexes also on the file containing the movie info
+        # create correct indexes also for the file containing the movie information
         new_indexes = []
         for _, movie_idx in ml_100_movies_file[0].items():
             new_indexes.append(item_mapping[movie_idx])
         ml_100_movies_file[0] = new_indexes
+        # sort movies by index for a better reading of file
         ml_100_movies_file = ml_100_movies_file.sort_values(by=[0])
         ml_100_movies_file.reset_index()
 
-        # process genres and get indexes
+        # get genres of the movies - they are one-hot encoded starting from column at index 6 of every record
         ml_100_movies_records = []
         for row_idx, row in ml_100_movies_file.iterrows():
+            # 0 means the item has not the genre, 1 means it has the genre
             movie_genres = [genre for _, genre in row[6:].items()]
+            # get indexes of the genres that the item belongs to - these indexes follow the order in self.genres
+            # which is also the order specified in the readME of the ml-100k dataset
             movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
+            # we specify None when an item has no genres - the genres are specified with their indexes according to the
+            # order in self.genres
             ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)
-                                          if movie_genres_idx else "None"})
+            if movie_genres_idx else "None"})
 
         # create new files
         ml_ratings.to_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"), sep="\t", index=False, header=None)
@@ -221,48 +249,54 @@ class MovieLensMR:
 
     def process_mr(self):
         """
-        It fixes the MindReader dataset by removing duplicated titles. There could be cases in which the title is the
-        same even if the movie is slightly different, for example from a different year.
-        To remove duplicates, we add the publication date to the title of the movie in brackets, as for the MovieLens
+        It processes the MindReader dataset by removing duplicated titles. There could be cases in which the title is
+        the same even if the movies are slightly different, for example they have a different publication year.
+        To remove duplicates, we add the publication date to the title of the movies (in brackets), as for the MovieLens
         datasets.
-        After these modifications have been done, it recreates the indexing of MindReader by substituting URIs with
-        proper indexes. The same is done for the user identifiers.
+        After these modifications have been done, it recreates the indexing of MindReader by substituting entity URIs
+        with proper indexes in [0, n_movies]. The same is done for the user identifiers, which are also represented
+        using strings in MindReader.
+        This procedure also filters the dataset by removing the unknown ratings (ratings at 0) and changing negative
+        ratings from -1 to 0.
+        At the end of the procedure, new files with proper modifications and indexing are created.
         """
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
-        # get titles of movies
+        # get mapping from URI to title for the movies of MindReader
         mr_uri_to_title = {entity["uri"]: entity["name"] for entity in mr_entities_dict
                            if "Movie" in entity["labels"]}
-
-        # get release dates of movies in MindReader
+        # get publication dates of movies of MindReader by querying Wikidata
         query = "SELECT ?film ?publicationDate WHERE { ?film wdt:P577 ?publicationDate. VALUES ?film {" + \
                 ' '.join(["wd:" + uri.split("/")[-1] for uri in mr_uri_to_title]) + \
                 "} SERVICE wikibase:label { bd:serviceParam wikibase:language '[AUTO_LANGUAGE],en'. } }"
 
         result = send_query(query)
 
+        # create a mapping from URI to publication date for the movies of MindReader
         mr_uri_to_date = {}
         for match in result:
             uri = match['film']['value']
-            date = match['publicationDate']['value'].split("-")[0]
+            date = match['publicationDate']['value'].split("-")[0]  # we need just the publication YEAR
             if uri not in mr_uri_to_date:
                 # we take only the first date for each movie, some movies have multiple publication dates
                 mr_uri_to_date[uri] = date
 
-        # put date on the title when it is available
+        # put date on the title (in brackets) when the date is available
+        # in the case the date is not available, we keep just the title of the movie
         mr_uri_to_title = {uri: "%s (%d)" % (title, int(mr_uri_to_date[uri]))
         if uri in mr_uri_to_date else title for uri, title in mr_uri_to_title.items()}
-
         # recreate "name" column of original dataframe - the new column has now dates on the titles when they are
         # available
+        # Attention: the entities file does not contain just movies, but all the entities of MindReader
+        # for this reason we also check if the entity is a movie or not
         mr_entities["name"] = [mr_uri_to_title[entity["uri"]]
                                if "Movie" in entity["labels"] else entity["name"] for entity in mr_entities_dict]
-
         # create new indexing for the dataset (users, movies)
         mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
         mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
-        # we want ratings only for the allowed genres
+        # we want ratings only for the allowed genres - we create a mapping between URIs and genre names
+        # for allowed genres
         mr_genres = {entity["uri"]: entity["name"] for entity in mr_entities_dict if "Genre" in entity["labels"]
                      if entity["name"] in self.genres}
         # remove unknown ratings
@@ -283,6 +317,7 @@ class MovieLensMR:
                 i += 1
             rating["uri"] = item_mapping[rating["uri"]]
             rating["userId"] = user_mapping[rating["userId"]]
+            # set negative ratings to 0 and positive ratings to 1
             rating["sentiment"] = int(rating["sentiment"] > 0)
             mr_movie_ratings_new.append(
                 {"u_idx": rating["userId"], "i_idx": rating["uri"], "rate": rating["sentiment"]})
@@ -291,10 +326,14 @@ class MovieLensMR:
 
         mr_genre_ratings_new = []
         for rating in mr_genre_ratings:
+            # some users could have rated only genres of movies - for this reason they could not be in the
+            # user mapping yet
             if rating["userId"] not in user_mapping:
                 user_mapping[rating["userId"]] = u
                 u += 1
             rating["userId"] = user_mapping[rating["userId"]]
+            # get index of the genre in the self.genres list - this list is used both for ml-100k and MindReader
+            # to unify the indexing of the genres
             rating["uri"] = self.genres.index(mr_genres[rating["uri"]])
             rating["sentiment"] = int(rating["sentiment"] > 0)
             mr_genre_ratings_new.append(
@@ -302,10 +341,11 @@ class MovieLensMR:
         mr_genre_ratings_new = pd.DataFrame.from_records(mr_genre_ratings_new)
         mr_genre_ratings_new.to_csv(os.path.join(self.data_path, "mindreader/processed/genre_ratings.csv"), index=False)
 
-        # now, we need to change the URIs in the triple.csv file and create e new file
+        # now, we need to associate each movie to its genres - we use a dict for doing that
         mr_triples_dict = pd.read_csv(os.path.join(self.data_path, "mindreader/triples.csv")).to_dict("records")
         mr_movie_genre_dict = {}
         for triple in mr_triples_dict:
+            # consider only mapped movies and allowed genres
             if triple["head_uri"] in item_mapping and triple["tail_uri"] in mr_genres \
                     and triple["relation"] == "HAS_GENRE":
                 if item_mapping[triple["head_uri"]] not in mr_movie_genre_dict:
@@ -315,13 +355,15 @@ class MovieLensMR:
                     mr_movie_genre_dict[item_mapping[
                         triple["head_uri"]]].append(self.genres.index(mr_genres[triple["tail_uri"]]))
 
-        # now, we need to change the URIs in the entities.csv file and create a new file
-        # the new file contains also the genres of the movies, as in MovieLens
+        # now, we need to create a file containing movie information, as for MovieLens
+        # the file will contain also the genres of the movies, as in MovieLens
         # if a movie is not in mr_movie_genre_dict, it means that the movie has not ratings, so we do not include it
         # in the entities since it is not necessary for the purpose of our experiments
-        # there could be a movie that is rated but does not belong to any of the selected genres
+        # there could be a movie that is rated but does not belong to any of the selected genres. In such a case
+        # we set the genres of the movie to None
         mr_entities_new = []
         for entity in mr_entities_dict:
+            # if the uri is in item_mapping, it means that it corresponds to a movie and it has been rated
             if entity["uri"] in item_mapping:
                 mr_entities_new.append({"idx": item_mapping[entity["uri"]],
                                         "title": entity["name"],
@@ -330,6 +372,7 @@ class MovieLensMR:
                                                             ])
                                         if item_mapping[entity["uri"]] in mr_movie_genre_dict else "None"})
         mr_entities_new = pd.DataFrame.from_records(mr_entities_new)
+        # sort file by index for better readability
         mr_entities_new = mr_entities_new.sort_values(by=["idx"])
         mr_entities_new.reset_index()
         mr_entities_new.to_csv(os.path.join(self.data_path, "mindreader/processed/movies.csv"), index=False)
@@ -344,89 +387,96 @@ class MovieLensMR:
 
     def create_mapping(self):
         """
-        It creates the mapping between the indexes of MovieLens-100k and the URIs of MindReader.
-        For doing that, it matches titles and years of the movies. In the cases in which there is not a perfect match
-        (==), it tries to use fuzzy methods to check the similarity (~=) between the titles.
+        It matches the movies of ml-100k with the movies of MindReader to find the joint set of the final dataset.
+
+        For doing that, it matches titles and years of the movies (the publication date is assumed to be after the
+        title and between brackets (the pre-processing prepare the dataset in such a manner)).
+        In the cases in which there is not a perfect match between the strings (==), it tries to use fuzzy methods
+        to check the similarity (~=) between the titles.
 
         The process is summarized as follows:
         1. the titles and years of MovieLens-100k are matched with titles and years of MovieLens-latest-small. This
-        is done because the latter dataset has updated links to iMDB entities;
-        2. the iMDB ids are given as input to a sparql query that retrieves the corresponding wikidata URIs;
-        3. the match between MovieLens-100k idx and wikidata URIs contained in MindReader is created;
-        4. it repeats the same procedure between titles and years of unmatched MovieLens-100k and MindReader movies.
+        is done because the latter dataset has updated links to iMDB entities for some of the movies in ml-100k;
+        2. the iMDB ids that have been found at the previous step are given as input to a sparql query that retrieves
+        the corresponding wikidata URIs;
+        3. the match between MovieLens-100k indexes and wikidata URIs contained in MindReader is created;
+        4. the wikidata URIs are converted in the corresponding MindReader indexes using the indexing computed
+        during pre-processing;
+        5. the same procedure is repeated between titles and years of unmatched MovieLens-100k and MindReader movies.
 
-        Returns a dictionary containing this mapping, namely ml_idx -> mr_uri.
+        Returns a dictionary containing this mapping, namely ml_idx -> mr_idx.
         """
         if os.path.exists(os.path.join(self.data_path, "mapping.csv")):
             ml_100_idx_to_mr_idx = pd.read_csv("./datasets/mapping.csv").to_dict("records")
-            ml_100_idx_to_mr_idx = {mapping["ml_idx"]: mapping["mr_idx"] for mapping in ml_100_idx_to_mr_idx}
+            ml_100_idx_to_mr_idx = {match["ml_idx"]: match["mr_idx"] for match in ml_100_idx_to_mr_idx}
         else:
-            # create index to iMDB link dict
+            # create mapping between movie indexes in ml-latest and iMDB ids
             ml_link_file = pd.read_csv(os.path.join(self.data_path, "ml-latest-small/links.csv"), dtype=str)
             ml_link_file["movieId"] = ml_link_file["movieId"].astype(np.int64)
             ml_link_file = ml_link_file.to_dict("records")
             ml_idx_to_link = {link["movieId"]: "tt" + link["imdbId"] for link in ml_link_file}
-
-            # create title to idx dict
+            # create mapping between movie titles in ml-latest and their indexes
             # note that there are two "Emma" in MovieLens-latest, but only one is in MindReader. Other Emma has
             # been manually canceled
             ml_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-latest-small/movies.csv")).to_dict("records")
             ml_title_to_idx = {movie["title"]: movie["movieId"] for movie in ml_movies_file}
-
-            # get imdb id for movies in MovieLens-100k
+            # get iMDB ids for movies in MovieLens-100k
             ml_100_title_to_idx = {movie[1]: movie[0] for movie in self.ml_100_movie_info}
             ml_100_idx_to_title = {idx: title for title, idx in ml_100_title_to_idx.items()}
-
             # match titles between MovieLens-100k and MovieLens-latest movies to get imdb id of MovieLens-100k movies
             ml_100_idx_to_imdb = {}
-            matched = []
+            matched = []  # it contains matched titles
             for title, idx in ml_100_title_to_idx.items():
                 if title in ml_title_to_idx:
                     # if title of 100k is in ml-latest dataset, get its link
                     ml_100_idx_to_imdb[idx] = ml_idx_to_link[ml_title_to_idx[title]]
                     matched.append(title)
-
-            # for remaining unmatched movies, I use fuzzy methods since the titles have some marginal differences
+            # for remaining unmatched movies, we use fuzzy methods since the titles have some marginal differences
             # (e.g., date, order of words)
             no_matched_100k = set(ml_100_title_to_idx.keys()) - set(matched)
             no_matched_ml = set(ml_title_to_idx.keys()) - set(matched)
 
-            for title_100 in no_matched_100k:
+            for ml_100_title in no_matched_100k:
                 try:
                     # get year of ml-100k movie
-                    f_year = int(title_100.strip()[-6:][1:5])
+                    f_year = int(ml_100_title.strip()[-6:][1:5])
                 except ValueError:
                     # if there is no year info, we do not find matches
                     continue
                 best_sim = 0.0
-                candidate_title_100 = ""
-                candidate_title = ""
-                for title in no_matched_ml:
+                candidate_ml_100_title = ""
+                candidate_ml_title = ""
+                for ml_title in no_matched_ml:
                     try:
                         # get year of ml-latest movie
-                        s_year = int(title.strip()[-6:][1:5])
+                        s_year = int(ml_title.strip()[-6:][1:5])
                     except ValueError:
                         continue
                     # compute similarity between titles with year removed
-                    title_sim = fuzz.token_set_ratio(title_100.strip()[:-6], title.strip()[:-6])
+                    title_sim = fuzz.token_set_ratio(ml_100_title.strip()[:-6], ml_title.strip()[:-6])
                     # search for best similarity between titles
-                    if title_sim > best_sim and title_100 not in matched and title not in matched and f_year == s_year:
+                    if title_sim > best_sim and ml_100_title not in matched and ml_title not in matched \
+                            and f_year == s_year:
                         best_sim = title_sim
-                        candidate_title_100 = title_100
-                        candidate_title = title
+                        candidate_ml_100_title = ml_100_title
+                        candidate_ml_title = ml_title
                 if best_sim >= 96:
+                    # here, it erroneously matches "My Life and Times With Antonin Artaud
+                    # (En compagnie d'Antonin Artaud)" in ml-100k with "My Life" in ml-latest
+                    # we manually modify the title of the first movie with just "En compagnie d'Antonin Artaud" in such
+                    # a way the procedure is not able to find the match anymore
                     # it seems that under 96 there are typos in the names and the matches are not reliable
                     # add movie to the dict containing the matches
-                    ml_100_idx_to_imdb[ml_100_title_to_idx[candidate_title_100]] = \
-                        ml_idx_to_link[ml_title_to_idx[candidate_title]]
-                    if candidate_title_100 == candidate_title:
+                    ml_100_idx_to_imdb[ml_100_title_to_idx[candidate_ml_100_title]] = \
+                        ml_idx_to_link[ml_title_to_idx[candidate_ml_title]]
+                    if candidate_ml_100_title == candidate_ml_title:
                         # match only one if they are the same
-                        matched.append(candidate_title)
+                        matched.append(candidate_ml_title)
                     else:
-                        # match both if they are different
-                        matched.append(candidate_title_100)
-                        matched.append(candidate_title)
-
+                        # match both if they are different since the `matched` list is shared between datasets
+                        matched.append(candidate_ml_100_title)
+                        matched.append(candidate_ml_title)
+            # update not matched 100k titles
             no_matched_100k = list(set(no_matched_100k) - set(matched))
 
             # now, we need to fetch the wikidata URIs for the movies we have matched between MovieLens-100k and
@@ -438,21 +488,25 @@ class MovieLensMR:
 
             result = send_query(query)
 
-            imdb_to_wikidata = {match['label']['value']: match['film']['value'] for match in result}
+            ml_100_imdb_to_wikidata_uri = {match['label']['value']: match['film']['value'] for match in result}
 
-            # create indexing from MovieLens-100k to Wikidata URIs - this indexing contains an entry only if the
-            # previous query found the link between iMDB id and Wikidata entity - for 3 movies the link is not found
-            # ml_100_idx_to_wikidata = {idx: imdb_to_wikidata[imdb_id] for idx, imdb_id in ml_100_idx_to_imdb.items()
-            #                           if imdb_id in imdb_to_wikidata}
-            ml_100_idx_to_wikidata = {}
+            # create mapping from MovieLens-100k indexes to Wikidata URIs - this mapping contains an entry only if the
+            # previous query found the link between ml-100k movie iMDB id and Wikidata entity - for 3 movies the
+            # link is not found
+            ml_100_idx_to_wikidata_uri = {}
             for idx, imdb_id in ml_100_idx_to_imdb.items():
-                if imdb_id in imdb_to_wikidata:
-                    ml_100_idx_to_wikidata[idx] = imdb_to_wikidata[imdb_id]
+                if imdb_id in ml_100_imdb_to_wikidata_uri:
+                    ml_100_idx_to_wikidata_uri[idx] = ml_100_imdb_to_wikidata_uri[imdb_id]
                 else:
+                    # update no matched 100k movies - we need to update it because we need to repeat a similar procedure
+                    # onl for unmatched movies
                     no_matched_100k.append(ml_100_idx_to_title[idx])
                     matched.remove(ml_100_idx_to_title[idx])
 
-            # filter mapping based on presence of movie in MindReader
+            # remove from the mapping all matches in which the wikidata uri does not appear in the MindReader dataset
+            # we do not need these matches since we are interested in matching ml-100k with MindReader
+            # fetch uri to idx mapping computed by the pre-processing procedure - we need to convert the fetched uris
+            # with proper indexes
             mr_uri_to_idx = pd.read_csv(os.path.join(self.data_path,
                                                      "mindreader/processed/item_mapping.csv")).to_dict("records")
             mr_uri_to_idx = {mapping["old_idx"]: mapping["new_idx"] for mapping in mr_uri_to_idx}
@@ -461,109 +515,139 @@ class MovieLensMR:
             mr_title_to_uri = {title: uri for uri, title in mr_uri_to_title.items()}
             # the match is kept only if the retrieved wikidata URI is in the corpus of movies of MindReader
             ml_100_idx_to_mr_uri = {}
-            for idx, uri in ml_100_idx_to_wikidata.items():
+            for idx, uri in ml_100_idx_to_wikidata_uri.items():
+                # note that mr_uri_to_title contains uris of movies that have been rated by at least a user
+                # not rated movies are not included in the dataset and hence also the matches between not rated movies
                 if uri in mr_uri_to_title:
                     ml_100_idx_to_mr_uri[idx] = uri
                 else:
+                    # update matched and no matched 100k movies
                     no_matched_100k.append(ml_100_idx_to_title[idx])
                     matched.remove(ml_100_idx_to_title[idx])
 
+            # compute no matched MindReader movies
             no_matched_mr = set(mr_uri_to_title.keys()) - set(ml_100_idx_to_mr_uri.values())
 
             # repeat fuzzy procedure between MovieLens-100k and MindReader directly, since there could be some errors
             # in the links of the ml-latest dataset
 
-            for title_100 in no_matched_100k:
+            for ml_100_title in no_matched_100k:
                 try:
                     # get year of ml-100k movie
-                    f_year = int(title_100.strip()[-6:][1:5])
+                    f_year = int(ml_100_title.strip()[-6:][1:5])
                 except ValueError:
                     continue
                 best_sim = 0.0
-                candidate_title_100 = ""
+                candidate_ml_100_title = ""
                 candidate_mr_title = ""
                 for uri in no_matched_mr:
+                    mr_title = mr_uri_to_title[uri]
                     try:
                         # get year of MindReader movie
-                        s_year = int(mr_uri_to_title[uri].strip()[-6:][1:5])
+                        s_year = int(mr_title.strip()[-6:][1:5])
                     except ValueError:
                         continue
                     # compute similarity between titles with year removed
-                    title_sim = fuzz.token_set_ratio(title_100.strip()[:-6], mr_uri_to_title[uri].strip()[:-6])
+                    title_sim = fuzz.token_set_ratio(ml_100_title.strip()[:-6], mr_title.strip()[:-6])
                     # search for best similarity between titles
-                    if title_sim > best_sim and title_100 not in matched and mr_uri_to_title[uri] not in matched \
+                    if title_sim > best_sim and ml_100_title not in matched and mr_title not in matched \
                             and f_year == s_year:
                         best_sim = title_sim
-                        candidate_title_100 = title_100
-                        candidate_mr_title = mr_uri_to_title[uri]
+                        candidate_ml_100_title = ml_100_title
+                        candidate_mr_title = mr_title
                 if best_sim >= 96:
-                    ml_100_idx_to_mr_uri[ml_100_title_to_idx[candidate_title_100]] = mr_title_to_uri[candidate_mr_title]
-                    if candidate_title_100 == candidate_mr_title:
-                        matched.append(candidate_title_100)
+                    # here, it erroneously matches "Big Blue, The (Grand bleu, Le)" of ml-100k with "Big" of MindReader
+                    # we set the title of the second movie to "Big (reg. Penny Marshall)" in such a way the procedure
+                    # does not find the match anymore
+                    ml_100_idx_to_mr_uri[ml_100_title_to_idx[candidate_ml_100_title]] = \
+                        mr_title_to_uri[candidate_mr_title]
+                    if candidate_ml_100_title == candidate_mr_title:
+                        matched.append(candidate_ml_100_title)
                     else:
-                        matched.append(candidate_title_100)
+                        matched.append(candidate_ml_100_title)
                         matched.append(candidate_mr_title)
 
+            # convert MindReader uris to proper indexes computed by the pre-processing procedure
             ml_100_idx_to_mr_idx = {idx: mr_uri_to_idx[uri] for idx, uri in ml_100_idx_to_mr_uri.items()}
-
+            # save the mapping for save time in the next run - we compute it once
             mapping = pd.DataFrame.from_dict({"ml_idx": list(ml_100_idx_to_mr_idx.keys()),
                                               "mr_idx": list(ml_100_idx_to_mr_idx.values())})
             mapping.to_csv("./datasets/mapping.csv", index=False)
 
         return ml_100_idx_to_mr_idx
 
-    def create_ml_mr_fusion(self):
+    def get_ml_union_mr_dataset(self):
         """
-        It creates the dataset that is the union between the movies of MovieLens-100k and the movies of
-        MindReader. We have ratings from users of MovieLens and ratings from users of MindReader. For MindReader, we
-        also have ratings on the genres of the movies.
+        Dataset containing the movie ratings of ml-100k, and the movie ratings and movie genres' ratings of MindReader.
+        The joint movies share the same index in the new dataset.
+
+        It creates a new dataset by merging the ratings of ml-100k and MindReader. The match between the movies
+        of ml-100k and the movies of MindReader is used to assign a unique index for those movies in the new dataset.
+        For the other movies, namely movies which appear only on ml-100k or only on MindReader, a new index is assigned.
+
+        The sets of users of the two datasets are disjoint. For ml-100k, the users rated only movies, while for
+        MindReader they rated also movie genres and other entities. In these experiments, we use only the ratings on
+        movie genres and not also on other entities since they are less represented.
 
         Only the most popular genres are taken into account, namely the genres appearing in the MovieLens-100k dataset.
-        The ratings on the other genres are not considered since they are sub-genres of the main genres.
+        They are just 18. The ratings on the other genres of MindReader (more than 150 genres) are not considered since
+        they are sub-genres of the main genres.
 
-        The idea of this dataset is to test if the information about the genres helps in improving the accuracy on
-        the MovieLens-100k, especially in the movies that do not belong to the intersection of the two datasets.
-        It is a kind of knowledge transfer from MindReader to MovieLens-100k.
+        The idea of this dataset is to test whether the information about the preferences on movie genres helps in
+        improving the accuracy on the MovieLens-100k, especially for the movies that do not belong to the intersection
+        of the two datasets. For those movies, a knowledge transfer formula could help in transferring knowledge learnt
+        in MindReader to ml-100k. It is a kind of knowledge transfer from MindReader to MovieLens-100k.
 
         We need to pay attention to the fact that it could be the information provided by the movie ratings of
         MindReader to increase the performance. For this reason, an ablation study should be done. We need to train both
         with genres and without genres.
+
+        Notes:
+            - the joint movies are mapped to the same new index
+            - other movies are mapped to new indexes
+            - this indexing is done in such a way that the indexes are in the range [0, n_movies]
+            - users from ml-100k and MindReader are mapped to the same index space in such a way that they are in the
+            range [0, n_users]
+            - the indexes of the genres are in the range [0, 18]. Use the `self.genres` list to understand to which
+            genre the index corresponds
+            - the function returns also the 4 mappings that have been internally built. They could be useful to come
+            back to original datasets from the new one
         """
-        # for creating the union, I need to take all the movies of MovieLens and all the movies of MindReader
-        # I still have to create a unique indexing. Some movies will be map to the same idx, some not
-        # idea: I create indexes for joint movies between the datasets, then I create indexes for the remaining movies
-        # in MovieLens-100k and MindReader
+        # for creating the fusion dataset, we need to take all the movies of ml-100k and all the movies of MindReader
+        # since some movies are shared across the datasets, they will share the same idx in the new dataset
+        # idea: we create indexes for joint movies between the datasets, then we create indexes for the remaining movies
+        # in ml-100k and MindReader
         # create unique indexing for shared movies between datasets
         ml_to_new_idx = {ml_idx: idx for idx, ml_idx in enumerate(self.ml_to_mr.keys())}
         mr_to_new_idx = {mr_idx: idx for idx, mr_idx in enumerate(self.ml_to_mr.values())}
         # create indexing for movies which are not shared
         ml_ratings = np.array([(rating[0], rating[1], rating[2]) for rating in self.ml_100_ratings])
-        # create indexes for ml-100k movie not in the joint set
-        j = len(self.ml_to_mr)
+        # create indexes for ml-100k movies not in the joint set
+        j = len(self.ml_to_mr)  # we start from the first available index after the joint movies
         for movie in self.ml_100_movie_info:
             if movie[0] not in self.ml_to_mr:
                 ml_to_new_idx[movie[0]] = j
                 j += 1
-        # create indexes for ml-100k movie not in the joint set
+        # create indexes for MindReader movies not in the joint set
         mr_movie_ratings = np.array([(rating["u_idx"], rating["i_idx"], rating["rate"])
                                      for rating in self.mr_movie_ratings])
         for movie in self.mr_movie_info:
+            # here, we take the values() because we need matched MindReader movies
             if movie["idx"] not in self.ml_to_mr.values():
                 mr_to_new_idx[movie["idx"]] = j
                 j += 1
-
         # create unique user indexing
+        # here, we have two distinct mappings because in both datasets the indexes of the users start from 0 after
+        # the pre-processing procedure
         user_mapping_ml = {}
         user_mapping_mr = {}
         i = 0
         for user in set(ml_ratings[:, 0]):
             user_mapping_ml[user] = i
             i += 1
-
         for user in set(mr_movie_ratings[:, 0]):
             user_mapping_mr[user] = i
             i += 1
-
         # create final dataset
         dataset_ratings = [{"u_idx": user_mapping_ml[u], "i_idx": ml_to_new_idx[i], "rate": r}
                            for u, i, r in ml_ratings]
@@ -572,28 +656,33 @@ class MovieLensMR:
         dataset_ratings = pd.DataFrame.from_records(dataset_ratings)
 
         # we need to associate each movie to its genres
-        # in the union we need to use also the genres of MovieLens-100k, since we have some movies for which we do not
+        # in the union, we need to use also the genres of MovieLens-100k, since we have some movies for which we do not
         # have the information in MindReader
         # we use only the most common genres, to reduce sparsity (genres of MovieLens-100k)
-        # for the joint set of movies, we use the genres in MindReader
-
+        # for the joint movies, we use the genres in MindReader, since they are more accurate and updated
+        # take the genres of all movies in MindReader first
+        # todo da notare che in tutte queste strutture si utilizzano gli indici finali, verificare che non uso un
+        #  mapping per convertirli, perche' non ce ne' bisogno
         dataset_movie_to_genres = {mr_to_new_idx[movie["idx"]]: movie["genres"].split("|")
                                    for movie in self.mr_movie_info}
+        # take the genres for remaining movies
         dataset_movie_to_genres = dataset_movie_to_genres | {ml_to_new_idx[movie[0]]: movie[2].split("|")
                                                              for movie in self.ml_100_movie_info
                                                              if ml_to_new_idx[movie[0]] not in dataset_movie_to_genres}
+        # create np.array of movie-genre pairs
         dataset_movie_to_genres = np.array([[movie, int(genre)] for movie in dataset_movie_to_genres
-                                           for genre in dataset_movie_to_genres[movie]
-                                           if genre != 'None'])
+                                            for genre in dataset_movie_to_genres[movie]
+                                            if genre != 'None'])
+        # convert the array in a sparse matrix (items X genres)
         dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
                                               (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
                                              shape=(j, len(self.genres)))
-
         # now, we need to associate each user to the genres she likes or dislikes - this info is only on MindReader
         # get ratings of users of MindReader for the genres
         mr_genre_ratings = [(rating["u_idx"], rating["g_idx"], rating["rate"])
                             for rating in self.mr_genre_ratings]
-        # todo forse questo pezzetto di codice non serve piu', per ora teniamolo per sicurezza
+        # todo forse questo pezzetto di codice non serve piu', per ora teniamolo per sicurezza, trova anche gli
+        #  indici per i nuovi utenti (utenti che hanno votato solo generi e non film)
         # this dict contains the genres that each user likes and the genres that each user dislikes
         dataset_user_to_genres = {}
         for u, g, r in mr_genre_ratings:
@@ -608,61 +697,70 @@ class MovieLensMR:
                     dataset_user_to_genres[user_mapping_mr[u]]["likes"].append(g)
                 else:
                     dataset_user_to_genres[user_mapping_mr[u]]["dislikes"].append(g)
-
-        # get genre_ratings as numpy
+        # get genre_ratings as numpy array by also mapping the users to the new indexes of the final dataset
         mr_genre_ratings = np.array([(user_mapping_mr[u], g, r) for u, g, r in mr_genre_ratings])
 
         return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, mr_genre_ratings, ml_to_new_idx, \
                mr_to_new_idx, user_mapping_ml, user_mapping_mr
 
-    def create_ml_mr_fusion_only_genres(self):
+    def get_ml_union_mr_genre_ratings_dataset(self):
         """
-        It creates the dataset that is the union between the movies of MovieLens-100k and the movies genres of
-        MindReader. We have ratings from users of MovieLens for movies and ratings from users of MindReader for movies
-        genres.
+        Dataset containing the movie ratings of ml-100k and the movie genres' ratings of MindReader.
 
-        Only the most popular genres are taken into account, namely the genres appearing in the MovieLens-100k dataset.
-        The ratings on the other genres are not considered since they are sub-genres of the main genres.
+        The idea of this dataset is to test whether the information about the genres in MindReader (just this info)
+        helps in improving the accuracy on the MovieLens-100k. The only way to transfer information from the genre
+        ratings of MindReader to ml-100k is to use a knowledge transfer formula in LTN.
 
-        The idea of this dataset is to test if the information about the genres (just this info) helps in improving the
-        accuracy on the MovieLens-100k.
-        It is a kind of knowledge transfer from MindReader to MovieLens-100k.
+        In practice, without knowledge transfer, the information can be transfer just thanks to the loss aggregation.
+        In the same batch, we will have ratings on movies of ml-100k and ratings on genres of MindReader. When the
+        predictions are aggregated, some information is shared across genres and movies since the overall signal is used
+        to update the weights.
+
+        By using a knowledge transfer formula, it could be possible to improve performances on ml-100k and to deal
+        with cold-start issues. In the cold-start cases, we have a few number of ratings. We can use the knowledge
+        transfer formula to predict genres preferences and then use this information to predict the best movies to
+        recommend.
         """
         # take ml-100k ratings
         ml_ratings = np.array([(rating[0], rating[1], rating[2]) for rating in self.ml_100_ratings])
-
         # we need to associate each movie to its genres
         # we use the information in MindReader for the movies in the joint set and the information of ml-100k for the
         # others
-        # we construct the inverse indexing to get genres of MindReader for movies in ml-100k
+        # we construct the inverse indexing to get genres of MindReader for movies in ml-100k that are in the joint set
         mr_to_ml = {mr_idx: ml_idx for ml_idx, mr_idx in self.ml_to_mr.items()}
-
+        # get genres of MindReader for ml-100k movies in the joint set
         dataset_movie_to_genres = {mr_to_ml[movie["idx"]]: movie["genres"].split("|")
                                    for movie in self.mr_movie_info if movie["idx"] in mr_to_ml}
+        # get genres for remaining movies in ml-100k
         dataset_movie_to_genres = dataset_movie_to_genres | {movie[0]: movie[2].split("|")
                                                              for movie in self.ml_100_movie_info
                                                              if movie[0] not in dataset_movie_to_genres}
+        # create numpy array of movie-genre pairs
         dataset_movie_to_genres = np.array([[movie, int(genre)] for movie in dataset_movie_to_genres
                                             for genre in dataset_movie_to_genres[movie]
                                             if genre != 'None'])
+        # convert array to sparse matrix
         dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
                                               (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
                                              shape=(len(np.unique(ml_ratings[:, 1])), len(self.genres)))
-
-        # get genre ratings
+        # get genre ratings in MindReader
         mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])
                                      for rating in self.mr_genre_ratings])
+        # take the first available user index after the users of ml-100k - we can do this because in the training set
+        # there is at least one rating for each user
         u = len(set(ml_ratings[:, 0]))
-        # map mr users to new indexes
+        # map mr users to new indexes - we need to do this because both ml-100k user indexes and MindReader user
+        # indexes start from 0
         user_mapping_mr = {}
         for user in set(mr_genre_ratings[:, 0]):
             if user not in user_mapping_mr:
                 user_mapping_mr[user] = u
                 u += 1
-
+        # map users to the new correct index
+        # this is done because both users in ml-100k and MindReader have indexes starting from 0
+        # we have to avoid to map different users to the same index
         mr_genre_ratings = np.array([[user_mapping_mr[u], g, r] for u, g, r in mr_genre_ratings])
-
-        # this is used just because crate_fusion_folds needs this info
+        # the code that follows is used just because crate_fusion_folds needs this info
         # there is not a new indexing for ml-100k users and movies
         item_mapping_ml = {movie_idx: movie_idx for movie_idx in set(ml_ratings[:, 1])}
         user_mapping_ml = {user_idx: user_idx for user_idx in set(ml_ratings[:, 0])}
@@ -671,41 +769,49 @@ class MovieLensMR:
 
         return ml_ratings, dataset_movie_to_genres, mr_genre_ratings, user_mapping_ml, item_mapping_ml, user_mapping_mr
 
-    def get_ml100k_folds(self, seed, mode=None, fair=True, n_neg=100):
+    def get_ml100k_folds(self, seed, mode='ml', fair=True, n_neg=100):
         """
         Creates and returns the training, validation, and test set of the MovieLens-100k dataset.
 
         The procedure starts from the entire datasets. To create the test set, one random positive movie rating for
-        each user is held-out. To complete the test example of the user, 100 irrelevant movies are randomly sampled.
+        each user is held-out. To complete the test example of the user, `n_neg` irrelevant movies (movies never seen
+        by the user in the dataset) are randomly sampled.
         The metrics evaluate the recommendation based on the position of the positive movie in a ranking containing all
-        the 101 movies.
+        the `n_neg` + 1 movies.
 
-        The validation set is constructed in the same way, starting from the remaining rating in the dataset.
+        The validation set is constructed in the same way, starting from the remaining positive ratings in the dataset.
 
-        The seed parameter is used for reproducibility of experiments.
+        Note that the test positive rating is held-out only if the user has at least 2 ratings, in such a way that at
+        least one positive rating remains in the training set. The same idea is applied to the validation set.
 
-        The mode parameter is used to control the selection of candidate test movies.
-        If mode is None, a random positive movie for each user is held out for validation and test, independently from
-        its presence in the MovieLens or the fusion dataset.
-        If mode is equal to "only-ml", the candidate test movies are randomly sampled from the set of movies that are
-        present only in the MovieLens dataset and not also in the MindReader dataset. This mode is used to see how the
-        knowledge transfer technique works in challenging scenarios.
-        If mode is equal to "only-fusion", the candidate test movies are randomly sampled for the set of movies that are
-        present only in the intersection between MovieLens and MindReader. Higher scores are expected for these movies
-        since the intersection is where the knowledge is easily transferred between the two datasets.
+        The `seed` parameter is used for reproducibility of experiments (random sample of positive and negative movies).
 
-        The n_neg parameter is used to decide the number of random negative samples used to construct each
+        The `mode` parameter is used to control the selection of candidate test movies:
+            - If mode is 'ml', a random positive movie for each user is held out for validation and test from the set of
+            ml-100k ratings. Note that in this evaluation type, the target item could belong to the joint movies or to
+            the movies appearing only in the ml-100k dataset.
+            - If mode is equal to "ml\\mr", the candidate test movies are randomly sampled from the set of movies that
+            appear only in the ml-100k dataset and not also in the joint set of movies. This mode is used to see how the
+            knowledge transfer technique works in challenging scenarios. Intuitively, ml\\mr means the difference
+            between the set of ratings in ml-100k and the set of ratings in MindReader, namely, the ratings on movies
+            that appear only in ml-100k.
+            - If mode is equal to "ml&mr", the candidate test movies are randomly sampled for the joint set of movies.
+            Higher scores are expected for these movies since the intersection is where the knowledge is easily
+            transferred between the two datasets. In fact, a movie in the joint set could have ratings from both users
+            in ml-100k and users in MindReader.
+
+        The `n_neg` parameter is used to decide the number of random negative samples used to construct each
         validation/test example. The higher the number the more challenging will be for the model to put
         the target item in the top-N positions of the ranking.
 
-        The fair parameter is used when only_ml or only_fusion are used. If fair is set to True, then the only_ml will
+        The `fair` parameter is used when 'ml\\mr' or 'ml&mr' are used. If fair is set to True, then the 'ml\\mr' will
         produce negative items which are only present in the ml-100k dataset and not in MindReader. If it is False, it
-        will produce negative items that could be also in the joint movies. The same is valid for only_fusion. If it is
-        True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k and the
-        intersection.
+        will produce negative items that could be also in the joint set of movies. The same is valid for 'ml&mr'.
+        If fair is True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k
+        and the joint set movies.
         """
-        # set seed
-        random.seed(seed)
+        assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode, )
+        # we need a dataframe because it allows to apply group by operations
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
         n_users = ratings[0].nunique()
         n_items = ratings[1].nunique()
@@ -713,47 +819,57 @@ class MovieLensMR:
         groups = ratings.groupby(by=[0])
         # get set of movie indexes
         ml_movies = set(ratings[1].unique())
+        # get movies in ml\mr
         only_ml_movies = ml_movies - set(self.ml_to_mr.keys())
         validation = []
         test = []
-        for user_idx, group in groups:
+        for u_idx, u_ratings in groups:
             # take n_neg randomly sampled negative (not seen by the user) movies for test and validation
-            not_seen = ml_movies - set(group[1])
+            not_seen_by_u = ml_movies - set(u_ratings[1])
             # positive ratings for the user
-            group_pos = group[group[2] == 1]
-            # filter group_pos based on selected mode
-            if mode == "only_ml":
-                # remove from group_pos all the positive ratings which belong to the fusion dataset (just ml movies)
-                group_pos = group_pos[~group_pos[1].isin(self.ml_to_mr)]
+            pos_u_ratings = u_ratings[u_ratings[2] == 1]
+            # filter pos_u_ratings based on selected mode
+            if mode == "ml\mr":
+                # remove from pos_u_ratings all the positive ratings which belong to the intersection dataset
+                # (we want the movies that are only in ml-100k)
+                pos_u_ratings = pos_u_ratings[~pos_u_ratings[1].isin(self.ml_to_mr)]
                 if fair:
                     # remove from negative movies the movies in the joint set
-                    not_seen -= set(self.ml_to_mr.keys())
-            if mode == "only_fusion":
-                # remove from group_pos all the positive ratings which do not belong to the fusion
+                    not_seen_by_u -= set(self.ml_to_mr.keys())
+            if mode == "ml&mr":
+                # remove from pos_u_ratings all the positive ratings which do not belong to the intersection
                 # dataset (just fusion movies)
-                group_pos = group_pos[group_pos[1].isin(self.ml_to_mr)]
+                pos_u_ratings = pos_u_ratings[pos_u_ratings[1].isin(self.ml_to_mr)]
                 if fair:
                     # remove from negative movies the movies which are not in the joint set
-                    not_seen -= only_ml_movies
+                    not_seen_by_u -= only_ml_movies
             # check if it is possible to sample - leave at least one positive rating in the training set
-            if len(group_pos) > 1:
-                # take one random positive rating for test and one for validation
-                if len(group_pos) > 2:
-                    sampled_pos = group_pos.sample(n=2, random_state=seed)
+            # if there is only one positive ratings for user u, we leave that rating in the training set
+            # the validation and test set will not include this specific user
+            if len(pos_u_ratings) > 1:
+                # if we have at least three positive ratings, take one random positive rating for test and one
+                # for validation
+                if len(pos_u_ratings) > 2:
+                    sampled_pos_u_ratings = pos_u_ratings.sample(n=2, random_state=seed)
                 else:
-                    sampled_pos = group_pos.sample(n=1, random_state=seed)
-                # remove sampled ratings from the dataset
-                ratings.drop(sampled_pos.index, inplace=True)
-                sampled_pos = list(sampled_pos[1])
+                    # if we have just two ratings, we held-out one for test and leave the other one in the training set
+                    sampled_pos_u_ratings = pos_u_ratings.sample(n=1, random_state=seed)
+                # remove sampled ratings from the dataset, since they are ratings held out for validation and/or test
+                ratings.drop(sampled_pos_u_ratings.index, inplace=True)
+                # get list of sampled item indexes
+                sampled_pos_u_ratings = list(sampled_pos_u_ratings[1])
                 # we cannot increase n_neg too much since we do not have a lot of negative movies when the mode is
-                # set to only_fusion
-                assert len(not_seen) > n_neg, "Problem: not_seen is %d and n_neg %d, set a lower " \
-                                              "number of n_neg" % (len(not_seen), n_neg)
-                neg_movies_test = random.sample(not_seen, n_neg)
-                test.append([[user_idx, item] for item in neg_movies_test + [sampled_pos[0]]])
-                if len(group_pos) > 2:
-                    neg_movies_val = random.sample(not_seen, n_neg)
-                    validation.append([[user_idx, item] for item in neg_movies_val + [sampled_pos[1]]])
+                # set to ml&mr
+                assert len(not_seen_by_u) > n_neg, "Problem: parameter n_neg (%d) is higher than the available " \
+                                                   "number of movies from which we can sample (%d). Set a lower " \
+                                                   "number of n_neg" % (n_neg, len(not_seen_by_u))
+                neg_movies_test_for_u = random.sample(not_seen_by_u, n_neg)
+                test.append([[u_idx, item] for item in neg_movies_test_for_u + [sampled_pos_u_ratings[0]]])
+                # if we have at least three positive ratings, it means we have have to create also the validation
+                # example for u
+                if len(pos_u_ratings) > 2:
+                    neg_movies_val_for_u = random.sample(not_seen_by_u, n_neg)
+                    validation.append([[u_idx, item] for item in neg_movies_val_for_u + [sampled_pos_u_ratings[1]]])
 
         validation = np.array(validation)
         test = np.array(test)
@@ -765,37 +881,40 @@ class MovieLensMR:
         return train, validation, test, n_users, n_items
 
     @staticmethod
-    def get_fusion_folds(train_set, movie_mapping, user_mapping, ml_val, ml_test, genre_ratings=None):
+    def get_fusion_folds(train_set, i_ml_to_fusion, u_ml_to_fusion, ml_val, ml_test, genre_ratings=None):
         """
-        It constructs the train, validation, and test set for the fusion between ml-100k and MindReader datasets.
+        It constructs the train, validation, and test set for the dataset which is the fusion between ml-100k and
+        MindReader datasets.
         It takes as input the validation set and test set of ml-100k in such a way to find the same ratings in the
         fusion dataset. We want the validation and test sets among the datasets to be identical since we need to
-        test whether the fusion provides improvements w.r.t. ml-100k alone.
+        test whether the fusion dataset provides improvements w.r.t. ml-100k alone.
 
         The movie and user mapping are required to find the same triples in the fusion dataset, since it uses a
         different indexing w.r.t. to ml-100k.
 
-        If parameter `with_genres` is different from None (np.array of genre ratings is given), the function returns
+        If parameter `genre_ratings` is different from None (np.array of genre ratings is given), the function returns
         also a np.array containing the ratings for the genres. Take into account that since some users have only
-        rated genres, the number of users between the two configurations will be different.
+        rated genres, the number of users between the two configurations might be different.
         """
-        # fetch correct indexes for the validation set of the fusion dataset
-        fusion_val = np.array([[[user_mapping[u], movie_mapping[i]] for u, i in user] for user in ml_val])
-        # fetch correct indexes for the test set of the fusion dataset
-        fusion_test = np.array([[[user_mapping[u], movie_mapping[i]] for u, i in user] for user in ml_test])
-        # create training set by removing the validation/test positive movie ratings
+        # todo e' qui che dovrei lasciare dei generi in test se voglio fare la verifica
+        # find the same validation examples in the fusion dataset
+        fusion_val = np.array([[[u_ml_to_fusion[u], i_ml_to_fusion[i]] for u, i in user] for user in ml_val])
+        # find the same test examples in the fusion dataset
+        fusion_test = np.array([[[u_ml_to_fusion[u], i_ml_to_fusion[i]] for u, i in user] for user in ml_test])
+        # create training set by removing the validation/test target ratings
         to_remove = fusion_val[:, -1]
         to_remove = np.concatenate((to_remove, fusion_test[:, -1]), axis=0).tolist()
         train_set_dict = train_set.to_dict("records")
         fusion_train = np.array([[rating["u_idx"], rating["i_idx"], rating["rate"]]
-                                for rating in train_set_dict if [rating["u_idx"], rating["i_idx"]] not in to_remove])
+                                 for rating in train_set_dict if [rating["u_idx"], rating["i_idx"]] not in to_remove])
         if genre_ratings is not None:
             n_users = len(set(train_set["u_idx"].unique()) | set(genre_ratings[:, 0]))
             n_items = train_set["i_idx"].nunique() + len(set(genre_ratings[:, 1]))  # we consider genres as items
             n_movies = train_set["i_idx"].nunique()
-            # move the genre indexes of the number of movies in the dataset -> the genre embeddings will be the last
-            # in the embedding tensor
+            # move the genre indexes after the movie indexes in the dataset -> the genre embeddings will be the last
+            # in the embedding tensor of the model
             new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
+            # the training set contains both ratings on movies and on movie genres
             return np.concatenate([fusion_train, new_genre_ratings], axis=0), fusion_val, fusion_test, n_users, n_items
 
         return fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(), train_set["i_idx"].nunique()
