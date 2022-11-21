@@ -108,6 +108,7 @@ class TrainingDataLoaderLTNGenres:
                    ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)), \
                   (ltn.Variable('users_phi2', torch.tensor(u_idx), add_batch_dim=False),
                    ltn.Variable('items_phi2', torch.tensor(i_idx), add_batch_dim=False),
+                   # note that here we add self.n_items because we want to model genres after the movies in the MF model
                    ltn.Variable('genres', torch.randint(0, self.n_genres,
                                                         size=(self.genre_sample_size,)) + self.n_items,
                                 add_batch_dim=False),

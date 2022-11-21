@@ -829,14 +829,14 @@ class MovieLensMR:
             # positive ratings for the user
             pos_u_ratings = u_ratings[u_ratings[2] == 1]
             # filter pos_u_ratings based on selected mode
-            if mode == "ml\mr":
+            if mode == "ml \ mr":
                 # remove from pos_u_ratings all the positive ratings which belong to the intersection dataset
                 # (we want the movies that are only in ml-100k)
                 pos_u_ratings = pos_u_ratings[~pos_u_ratings[1].isin(self.ml_to_mr)]
                 if fair:
                     # remove from negative movies the movies in the joint set
                     not_seen_by_u -= set(self.ml_to_mr.keys())
-            if mode == "ml&mr":
+            if mode == "ml & mr":
                 # remove from pos_u_ratings all the positive ratings which do not belong to the intersection
                 # dataset (just fusion movies)
                 pos_u_ratings = pos_u_ratings[pos_u_ratings[1].isin(self.ml_to_mr)]

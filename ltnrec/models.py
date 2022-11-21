@@ -273,6 +273,8 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
+        # here, we need to remove n_movies because the genres are in [n_movies, n_movies + n_genres] in the MF model
+        # instead, in the item_genres_matrix they are in [0, n_genres]
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx - n_movies])
         self.p = p
 

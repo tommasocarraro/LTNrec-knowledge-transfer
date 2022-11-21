@@ -1,0 +1,8 @@
+{
+  "k": 1,
+  "biased": true,
+  "lr": 0.001,
+  "wd": 0.0001,
+  "tr_batch_size": 256,
+  "val_batch_size": 512
+}
