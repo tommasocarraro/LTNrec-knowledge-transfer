@@ -27,7 +27,7 @@ movie_ratings, movie_genres_matrix, _, genre_ratings, ml_to_new_idx, _, user_map
 # get dataset that is the union of movie ratings of ml and genre ratings of mr
 g_movie_ratings, g_movie_genres_matrix, g_genre_ratings, g_user_mapping, g_item_mapping, _ = \
     data.get_ml_union_mr_genre_ratings_dataset()
-for mode in ["ml", "ml \ mr", "ml & mr"]:
+for mode in ["ml", "ml\mr", "ml&mr"]:  # "ml", "ml \ mr", "ml & mr"
     set_seed(seed)
     # get ml-100k dataset
     ml_tr, ml_val, ml_test, ml_n_users, ml_n_items = data.get_ml100k_folds(seed, mode=mode, n_neg=200)
@@ -49,29 +49,29 @@ for mode in ["ml", "ml \ mr", "ml & mr"]:
     print("------------- Training on ml | mr (movies) --------------")
     train_standard_mf(fusion_n_users, fusion_n_items, fusion_train,
                       fusion_val, fusion_test, ["hit@10", "ndcg@10"], seed,
-                      "%s-%s-%s" % (mode, "ml | mr (movies)", "standard_mf"), "exp1")
+                      "%s-%s-%s" % (mode, "ml|mr(movies)", "standard_mf"), "exp1")
     train_ltn_mf(fusion_n_users, fusion_n_items, fusion_train, fusion_val, fusion_test, ["hit@10", "ndcg@10"], seed,
-                 "%s-%s-%s" % (mode, "ml | mr (movies)", "ltn_mf"), "exp1")
+                 "%s-%s-%s" % (mode, "ml|mr(movies)", "ltn_mf"), "exp1")
     print("------------- Training on ml | mr (movies + genres) --------------")
     train_standard_mf(fusion_genres_n_users, fusion_genres_n_items, fusion_genres_train,
                       fusion_val, fusion_test, ["hit@10", "ndcg@10"], seed,
-                      "%s-%s-%s" % (mode, "ml | mr (movies + genres)", "standard_mf"), "exp1")
+                      "%s-%s-%s" % (mode, "ml|mr(movies+genres)", "standard_mf"), "exp1")
     train_ltn_mf(fusion_genres_n_users, fusion_genres_n_items, fusion_genres_train, fusion_val,
                  fusion_test, ["hit@10", "ndcg@10"], seed,
-                 "%s-%s-%s" % (mode, "ml | mr (movies + genres)", "ltn_mf"),
+                 "%s-%s-%s" % (mode, "ml|mr(movies+genres)", "ltn_mf"),
                  "exp1")
     train_ltn_mf_genres(fusion_genres_n_users, fusion_genres_n_items, len(data.genres), movie_genres_matrix,
                         fusion_genres_train, fusion_val, fusion_test, ["hit@10", "ndcg@10"], 2022,
-                        "%s-%s-%s" % (mode, "ml | mr (movies + genres)",
+                        "%s-%s-%s" % (mode, "ml|mr(movies+genres)",
                                       "ltn_mf_genres"), "exp1")
     print("------------- Training on ml (movies) | mr (genres) --------------")
     train_standard_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, fusion_g_genres_train,
                       ml_val, ml_test, ["hit@10", "ndcg@10"], seed,
-                      "%s-%s-%s" % (mode, "ml (movies) | mr (genres)", "standard_mf"), "exp1")
+                      "%s-%s-%s" % (mode, "ml(movies)|mr(genres)", "standard_mf"), "exp1")
     train_ltn_mf(fusion_g_genres_n_users, fusion_g_genres_n_items, fusion_g_genres_train, ml_val,
                  ml_test, ["hit@10", "ndcg@10"], seed,
-                 "%s-%s-%s" % (mode, "ml (movies) | mr (genres)", "ltn_mf"), "exp1")
+                 "%s-%s-%s" % (mode, "ml(movies)|mr(genres)", "ltn_mf"), "exp1")
     train_ltn_mf_genres(fusion_g_genres_n_users, fusion_g_genres_n_items, len(data.genres), g_movie_genres_matrix,
                         fusion_g_genres_train, ml_val, ml_test, ["hit@10", "ndcg@10"], 2022,
-                        "%s-%s-%s" % (mode, "ml (movies) | mr (genres)",
+                        "%s-%s-%s" % (mode, "ml(movies)|mr(genres)",
                                       "ltn_mf_genres"), "exp1")
