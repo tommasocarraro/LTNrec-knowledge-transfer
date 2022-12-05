@@ -1,10 +1,15 @@
 {
-  "k": 1,
-  "biased": true,
-  "lr": 0.001,
-  "wd": 0.0001,
-  "tr_batch_size": 256,
+  "k": [1, 5],
+  "biased": [false, true],
+  "lr": [0.001],
+  "wd": [0.0001],
+  "tr_batch_size": [256],
   "val_batch_size": 512,
-  "alpha": 0.05,
-  "p": 2
+  "alpha": [0.05],
+  "p": [2],
+  "val_metric": "hit@10",
+  "n_epochs": 100,
+  "early_stop": 10,
+  "verbose": 1,
+  "test_metrics": ["hit@10", "ndcg@10"]
 }

@@ -46,6 +46,30 @@ from scipy.sparse import csr_matrix
 # todo forse ha senso che se a uno piace comedy horror, almeno mettiamo che gli piace il genere piu' alto nella
 #  gerarchia?
 
+class Dataset:
+    def __init__(self, train, val, test, n_users, n_items, name):
+        self.train = train
+        self.val = val
+        self.test = test
+        self.n_users = n_users
+        self.n_items = n_items
+        self.name = name
+
+
+class DatasetWithGenres(Dataset):
+    def __init__(self, train, val, test, n_users, n_items, name, n_genres):
+        super(DatasetWithGenres, self).__init__(train, val, test, n_users, n_items, name)
+        self.n_genres = n_genres
+        self.item_genres_matrix = None
+
+    def set_item_genres_matrix(self, item_genres_matrix):
+        self.item_genres_matrix = item_genres_matrix
+
+    def set_item_genres_matrix_ret(self, item_genres_matrix):
+        d = self.__init__(self.train, self.val, self.test, self.n_users, self.n_items, self.name, self.n_genres)
+        d.set_item_genres_matrix(item_genres_matrix)
+        return d
+
 
 def send_query(query):
     """
@@ -64,7 +88,7 @@ def send_query(query):
     return result
 
 
-class MovieLensMR:
+class DataManager:
     """
     Class that manages the dataset. The dataset is a fusion of the MovieLens-100k dataset with the MindReader dataset.
 
@@ -674,34 +698,37 @@ class MovieLensMR:
                                             for genre in dataset_movie_to_genres[movie]
                                             if genre != 'None'])
         # convert the array in a sparse matrix (items X genres)
-        dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
-                                              (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
-                                             shape=(j, len(self.genres)))
+        movie_genres_matrix = csr_matrix((np.ones(len(dataset_movie_to_genres)),
+                                          (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
+                                         shape=(j, len(self.genres)))
         # now, we need to associate each user to the genres she likes or dislikes - this info is only on MindReader
         # get ratings of users of MindReader for the genres
         mr_genre_ratings = [(rating["u_idx"], rating["g_idx"], rating["rate"])
                             for rating in self.mr_genre_ratings]
-        # todo forse questo pezzetto di codice non serve piu', per ora teniamolo per sicurezza, trova anche gli
-        #  indici per i nuovi utenti (utenti che hanno votato solo generi e non film)
+
         # this dict contains the genres that each user likes and the genres that each user dislikes
-        dataset_user_to_genres = {}
+        # dataset_user_to_genres = {}
+        # get new index for users of MindReader that only rated movie genres
         for u, g, r in mr_genre_ratings:
             if u not in user_mapping_mr:  # some users have only rated movie genres, so we need to add them to the map
                 user_mapping_mr[u] = i
                 i += 1
-            if user_mapping_mr[u] not in dataset_user_to_genres:
-                dataset_user_to_genres[user_mapping_mr[u]] = {"likes": [g], "dislikes": []} \
-                    if r == 1 else {"likes": [], "dislikes": [g]}
-            else:
-                if r == 1:
-                    dataset_user_to_genres[user_mapping_mr[u]]["likes"].append(g)
-                else:
-                    dataset_user_to_genres[user_mapping_mr[u]]["dislikes"].append(g)
+            # if user_mapping_mr[u] not in dataset_user_to_genres:
+            #     dataset_user_to_genres[user_mapping_mr[u]] = {"likes": [g], "dislikes": []} \
+            #         if r == 1 else {"likes": [], "dislikes": [g]}
+            # else:
+            #     if r == 1:
+            #         dataset_user_to_genres[user_mapping_mr[u]]["likes"].append(g)
+            #     else:
+            #         dataset_user_to_genres[user_mapping_mr[u]]["dislikes"].append(g)
         # get genre_ratings as numpy array by also mapping the users to the new indexes of the final dataset
         mr_genre_ratings = np.array([(user_mapping_mr[u], g, r) for u, g, r in mr_genre_ratings])
 
-        return dataset_ratings, dataset_movie_to_genres, dataset_user_to_genres, mr_genre_ratings, ml_to_new_idx, \
-               mr_to_new_idx, user_mapping_ml, user_mapping_mr
+        # unify user and item mappings
+        idx_mapping = {"user": {"ml": user_mapping_ml, "mr": user_mapping_mr},
+                   "item": {"ml": ml_to_new_idx, "mr": mr_to_new_idx}}
+
+        return dataset_ratings, movie_genres_matrix, mr_genre_ratings, idx_mapping
 
     def get_ml_union_mr_genre_ratings_dataset(self):
         """
@@ -740,9 +767,9 @@ class MovieLensMR:
                                             for genre in dataset_movie_to_genres[movie]
                                             if genre != 'None'])
         # convert array to sparse matrix
-        dataset_movie_to_genres = csr_matrix((np.ones(len(dataset_movie_to_genres)),
-                                              (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
-                                             shape=(len(np.unique(ml_ratings[:, 1])), len(self.genres)))
+        movie_genres_matrix = csr_matrix((np.ones(len(dataset_movie_to_genres)),
+                                         (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
+                                         shape=(len(np.unique(ml_ratings[:, 1])), len(self.genres)))
         # get genre ratings in MindReader
         mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])
                                      for rating in self.mr_genre_ratings])
@@ -762,12 +789,13 @@ class MovieLensMR:
         mr_genre_ratings = np.array([[user_mapping_mr[u], g, r] for u, g, r in mr_genre_ratings])
         # the code that follows is used just because crate_fusion_folds needs this info
         # there is not a new indexing for ml-100k users and movies
-        item_mapping_ml = {movie_idx: movie_idx for movie_idx in set(ml_ratings[:, 1])}
-        user_mapping_ml = {user_idx: user_idx for user_idx in set(ml_ratings[:, 0])}
+        # item_mapping_ml = {movie_idx: movie_idx for movie_idx in set(ml_ratings[:, 1])}
+        # user_mapping_ml = {user_idx: user_idx for user_idx in set(ml_ratings[:, 0])}
         # we need the ratings in the records format since create_fusion_folds requires this format
         ml_ratings = pd.DataFrame.from_records([{"u_idx": u, "i_idx": i, "rate": r} for u, i, r in ml_ratings])
+        # unify index mappings
 
-        return ml_ratings, dataset_movie_to_genres, mr_genre_ratings, user_mapping_ml, item_mapping_ml, user_mapping_mr
+        return ml_ratings, movie_genres_matrix, mr_genre_ratings
 
     def get_ml100k_folds(self, seed, mode='ml', fair=True, n_neg=100):
         """
@@ -810,7 +838,7 @@ class MovieLensMR:
         If fair is True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k
         and the joint set movies.
         """
-        assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode, )
+        assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode,)
         # we need a dataframe because it allows to apply group by operations
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
         n_users = ratings[0].nunique()
@@ -878,10 +906,9 @@ class MovieLensMR:
         train = ratings.to_dict("records")
         train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
 
-        return train, validation, test, n_users, n_items
+        return Dataset(train, validation, test, n_users, n_items, name="ml")
 
-    @staticmethod
-    def get_fusion_folds(train_set, i_ml_to_fusion, u_ml_to_fusion, ml_val, ml_test, genre_ratings=None):
+    def get_fusion_folds_given_ml_folds(self, train_set, ml_val, ml_test, idx_mapping=None, genre_ratings=None):
         """
         It constructs the train, validation, and test set for the dataset which is the fusion between ml-100k and
         MindReader datasets.
@@ -897,10 +924,21 @@ class MovieLensMR:
         rated genres, the number of users between the two configurations might be different.
         """
         # todo e' qui che dovrei lasciare dei generi in test se voglio fare la verifica
-        # find the same validation examples in the fusion dataset
-        fusion_val = np.array([[[u_ml_to_fusion[u], i_ml_to_fusion[i]] for u, i in user] for user in ml_val])
-        # find the same test examples in the fusion dataset
-        fusion_test = np.array([[[u_ml_to_fusion[u], i_ml_to_fusion[i]] for u, i in user] for user in ml_test])
+        fusion_val = ml_val
+        fusion_test = ml_test
+        # if idx_mapping is not None, it means that the new dataset has a different indexing, so we need to find the
+        # correct user-item pair that need to be removed from the training set and put into validation and test sets
+        # the correct user-item pairs are into ml_val and ml_test. We use the idx_mapping to find them in the new
+        # dataset
+        # if idx_mapping is None, it means that the new dataset has the same indexing of ml_val and ml_test, so they
+        # can be directly used
+        if idx_mapping is not None:
+            # find the same validation examples in the fusion dataset
+            fusion_val = np.array([[[idx_mapping["user"]["ml"][u], idx_mapping["item"]["ml"][i]] for u, i in user]
+                                   for user in ml_val])
+            # find the same test examples in the fusion dataset
+            fusion_test = np.array([[[idx_mapping["user"]["ml"][u], idx_mapping["item"]["ml"][i]] for u, i in user]
+                                    for user in ml_test])
         # create training set by removing the validation/test target ratings
         to_remove = fusion_val[:, -1]
         to_remove = np.concatenate((to_remove, fusion_test[:, -1]), axis=0).tolist()
@@ -915,6 +953,10 @@ class MovieLensMR:
             # in the embedding tensor of the model
             new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
             # the training set contains both ratings on movies and on movie genres
-            return np.concatenate([fusion_train, new_genre_ratings], axis=0), fusion_val, fusion_test, n_users, n_items
+            return DatasetWithGenres(np.concatenate([fusion_train, new_genre_ratings], axis=0),
+                                     fusion_val, fusion_test, n_users, n_items,
+                                     name="ml|mr(movies+genres)" if idx_mapping is not None else "ml(movies)|mr(genres)",
+                                     n_genres=len(self.genres))
 
-        return fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(), train_set["i_idx"].nunique()
+        return DatasetWithGenres(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
+                                 train_set["i_idx"].nunique(), name="ml|mr(movies)", n_genres=len(self.genres))
