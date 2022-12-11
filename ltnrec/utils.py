@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import numpy as np
 import random
@@ -37,7 +39,7 @@ def append_to_result_file(file_name, experiment_name, result, seed):
     :param seed: seed with which the result has been obtained. It is used to construct a directory
     """
     if not os.path.exists("./results/seed_%d" % seed):
-        os.mkdir("/.results/seed_%d" % seed)
+        os.mkdir("./results/seed_%d" % seed)
     experiment = experiment_name.split("-")
     evaluation = experiment[0]
     train_set = experiment[1]
@@ -47,8 +49,6 @@ def append_to_result_file(file_name, experiment_name, result, seed):
         # open json file
         with open("./results/seed_%d/%s.json" % (seed, file_name)) as json_file:
             data = json.load(json_file)
-        # remove the file after it has been loaded - the procedure recreates the updated file
-        os.remove("./results/seed_%d/%s.json" % (seed, file_name))
     else:
         # if the file does not exist - we create the file
         data = {}
@@ -65,8 +65,89 @@ def append_to_result_file(file_name, experiment_name, result, seed):
                 # check if the experiment with this model has been already included in the results of the train_set
                 data[evaluation][train_set][model] = result
 
+    # rewrite json file with updated information
     with open("./results/seed_%d/%s.json" % (seed, file_name), "w") as outfile:
         json.dump(data, outfile, indent=4)
+
+
+def create_report_dict(starting_seed=0, n_runs=30, exp_name="experiment"):
+    # create dictionary containing the results
+    result_dict = {}
+    for seed in range(starting_seed, starting_seed + n_runs):
+        assert os.path.exists("./results/seed_%d/%s.json" % (seed, exp_name)), "There is not folder containing the " \
+                                                                               "results obtained with " \
+                                                                               "seed %d" % (seed,)
+        # get file with results for the current seed
+        with open("./results/seed_%d/%s.json" % (seed, exp_name)) as json_file:
+            data = json.load(json_file)
+        for evaluation_mode in data:
+            if evaluation_mode not in result_dict:
+                result_dict[evaluation_mode] = {}
+            for training_fold in data[evaluation_mode]:
+                if training_fold not in result_dict[evaluation_mode]:
+                    result_dict[evaluation_mode][training_fold] = {}
+                for model in data[evaluation_mode][training_fold]:
+                    if model not in result_dict[evaluation_mode][training_fold]:
+                        result_dict[evaluation_mode][training_fold][model] = {}
+                    for metric in data[evaluation_mode][training_fold][model]:
+                        if metric not in result_dict[evaluation_mode][training_fold][model]:
+                            result_dict[evaluation_mode][training_fold][model][metric] = \
+                                [data[evaluation_mode][training_fold][model][metric]]
+                        else:
+                            result_dict[evaluation_mode][training_fold][model][metric].append(
+                                data[evaluation_mode][training_fold][model][metric])
+
+    # repeat the loop to compute mean and std after the results from each seed have been fetched
+    for evaluation_mode in result_dict:
+        for training_fold in result_dict[evaluation_mode]:
+            for model in result_dict[evaluation_mode][training_fold]:
+                for metric in result_dict[evaluation_mode][training_fold][model]:
+                    result_dict[evaluation_mode][training_fold][model][metric] = (
+                        np.mean(result_dict[evaluation_mode][training_fold][model][metric]),
+                        np.std(result_dict[evaluation_mode][training_fold][model][metric]))
+
+    return result_dict
+
+
+def generate_report_table(report_dict,
+                          metrics=("hit@10", "ndcg@10"),
+                          models=("standard_mf", "ltn_mf", "ltn_mf_genres"),
+                          evaluation_modes=("ml", "ml&mr", "ml\mr"),
+                          training_folds=("ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)")):
+    table = "\\begin{table*}[ht!]\n"
+    table += "\caption{Table title}\label{table-label}\n"
+    table += "\centering\n"
+    table += "\\begin{tabular}{| c | c | %s}\n" % ("".join(["c " * len(metrics) + "| " for _ in models], ))
+    table += "\hline\n"
+    table += "&"
+    for model in models:
+        table += " & \multicolumn{%d}{c |}{%s}" % (len(metrics), model.replace("_", "\\_"))
+    table += "\\\\\n"
+    table += "\hline\n"
+    table += "&"
+    for _ in models:
+        for metric in metrics:
+            table += " & %s" % (metric, )
+    table += "\\\\\n"
+    table += "\hline\n"
+    for mode in evaluation_modes:
+        table += "\multirow{%d}{*}{%s}" % (len(training_folds), mode.replace("\\", " $\setminus$ ").replace("&", " $\cap$ "))
+        for tr_fold in training_folds:
+            table += " & %s" % (tr_fold.replace("|", " $\cup$ "), )
+            for model in models:
+                if model in report_dict[mode][tr_fold]:
+                    for metric in metrics:
+                        table += " & %.3f$_{(%.3f)}$" % report_dict[mode][tr_fold][model][metric]
+                else:
+                    table += " & na" * len(metrics)
+            table += "\\\\\n"
+        table += "\hline\n"
+    table += "\end{tabular}\n"
+    table += "\end{table*}"
+    print(table)
+
+
+
 
 
 # def run_experiment_with_seed(seed, evaluation_modes, training_folds, models, exp_name):

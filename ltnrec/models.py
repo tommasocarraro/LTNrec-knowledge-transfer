@@ -7,6 +7,7 @@ from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoader
 import json
 from torch.optim import Adam
 from ltnrec.utils import append_to_result_file, set_seed
+import wandb
 
 
 class MatrixFactorization(torch.nn.Module):
@@ -60,7 +61,7 @@ class Trainer:
         self.optimizer = optimizer
 
     def train(self, train_loader, val_loader, val_metric, n_epochs=200, early=None, verbose=10, save_path=None,
-              model_name=None):
+              model_name=None, wandb_train=False):
         """
         Method for the train of the model.
         :param train_loader: data loader for training data
@@ -72,6 +73,7 @@ class Trainer:
         :param save_path: path where to save the best model, default to None
         :param model_name: name of model. It is used for printing model information in the log. It is useful when
         concurrency is used to train simultaneously.
+        :param wandb_train: whether the training is done on Weights and Biases or not.
         """
         best_val_score = 0.0
         early_counter = 0
@@ -88,6 +90,10 @@ class Trainer:
                                                                                   val_score)
                 if model_name is not None:
                     log_record = ("%s : " % model_name) + log_record
+                if wandb_train:
+                    wandb.log({
+                        'val_%s' % (val_metric, ): val_score
+                    })
                 print(log_record)
             # save best model and update early stop counter, if necessary
             if val_score > best_val_score:
@@ -227,18 +233,19 @@ class LTNTrainerMF(MFTrainer):
     as input a predicted score and the ground truth, and returns a value in the range [0., 1.]. Higher the value,
     higher the closeness between the predicted score and the ground truth.
     """
-    def __init__(self, mf_model, optimizer, alpha):
+    def __init__(self, mf_model, optimizer, alpha, p=2):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
         :param alpha: coefficient of smooth equality predicate
+        :param p: hyper-parameter p for pMeanError of the quantifier
         """
         super(LTNTrainerMF, self).__init__(mf_model, optimizer)
         self.Likes = ltn.Function(self.model)
         self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
-        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=2), quantifier='f')
+        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
         self.sat_agg = ltn.fuzzy_ops.SatAgg()
 
     def train_epoch(self, train_loader):
@@ -279,7 +286,7 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
         belongs to the genre
         """
-        super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha)
+        super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha, p)
         item_genres_matrix = torch.tensor(item_genres_matrix.todense())
         self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
@@ -287,7 +294,6 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         # here, we need to remove n_movies because the genres are in [n_movies, n_movies + n_genres] in the MF model
         # instead, in the item_genres_matrix they are in [0, n_genres]
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx - n_movies])
-        self.p = p
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
@@ -297,7 +303,7 @@ class LTNTrainerMFGenres(LTNTrainerMF):
             f2 = self.Forall(ltn.diag(u2, i2),
                              self.Forall(g, self.Implies(
                                  self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
-                                 self.Sim(self.Likes(u2, i2), r_)), p=self.p), p=self.p)
+                                 self.Sim(self.Likes(u2, i2), r_))))
             train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat
             loss.backward()
@@ -311,22 +317,29 @@ class Model:
     """
     Abstract base class that any model must inherit from.
     """
-    def __init__(self, save_path_prefix):
+    def __init__(self, config_file_name):
         """
         It constructs a model.
-        :param save_path_prefix: prefix of the path where to save the weights of the best model. It is also the prefix
-        of the path where to save the best hyper-parameters configuration.
+        :param config_file_name: name of the configuration file containing the hyper-parameters of the model and the
+        values that have to be tried during the grid search.
         """
-        self.save_path_prefix = save_path_prefix
+        self.model_name = config_file_name
+        assert os.path.exists("./config/%s.json" % self.model_name), "The configuration file specified " \
+                                                                     "does not exist. Please, add " \
+                                                                     "it at ./config"
+        with open("./config/%s.json" % self.model_name) as json_file:
+            self.param_config = json.load(json_file)
 
-    def grid_search(self, data, seed, first_seed):
+    def grid_search(self, data, seed, save_path_prefix):
         """
         It performs a grid search of the model, with hyper-parameters specified in the corresponding config file.
         It creates a JSON file containing the best configuration of hyper-parameters.
+        prefix of the path where to save the weights of the best model. It is also the prefix
+        of the path where to save the best hyper-parameters configuration.
         """
         pass
 
-    def run_experiment(self, data, seed, result_file_name, first_seed):
+    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
         """
         It trains and tests the model. To train the model, it uses the hyper-parameters specified in the config file
         created by the grid_search() method. If this file does not exist, it runs a grid search to find the best
@@ -339,33 +352,22 @@ class StandardMFModel(Model):
     """
     Standard matrix factorization model. It uses the MSE between target and predicted ratings as an objective.
     """
-    def __init__(self, save_path_prefix):
-        super(StandardMFModel, self).__init__(save_path_prefix)
-        self.model_name = "standard_mf"
-        assert os.path.exists("./config/%s.json" % self.model_name), "The configuration file for StandardMFModel " \
-                                                                     "does not exist. Please, add " \
-                                                                     "it as ./config/standard_mf.json"
-        with open("./config/%s.json" % self.model_name) as json_file:
-            self.param_config = json.load(json_file)
+    def __init__(self, config_file_name="standard_mf"):
+        super(StandardMFModel, self).__init__(config_file_name)
 
-    def grid_search(self, data, seed, first_seed):
-        # todo la grid search la dovrei fare solamente per la prima run. Noto che se lancio grid search per diversi
-        #  seed, succede che inizia a farmi la stessa grid search con seed diverso. Come evitare?
-        if first_seed is None:
-            # if first_seed is None, the grid search has to be computed for each seed
-            first_seed = seed
-        if seed == first_seed:
+    def grid_search(self, data, seed, save_path_prefix):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             set_seed(seed)
             best_score = 0.0
             val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, self.save_path_prefix))
+            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
             for k in self.param_config["k"]:
                 for biased in self.param_config["biased"]:
                     for lr in self.param_config["lr"]:
                         for wd in self.param_config["wd"]:
                             for tr_batch_size in self.param_config["tr_batch_size"]:
                                 print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, batch_size=%d" %
-                                      (self.model_name, self.save_path_prefix, k, biased, lr, wd, tr_batch_size))
+                                      (self.model_name, save_path_prefix, k, biased, lr, wd, tr_batch_size))
                                 # train model with current configuration
                                 model = MatrixFactorization(data.n_users, data.n_items, k, biased)
                                 tr_loader = TrainingDataLoader(data.train, tr_batch_size)
@@ -373,11 +375,11 @@ class StandardMFModel(Model):
                                 trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                                               n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
                                               verbose=self.param_config["verbose"],
-                                              save_path="./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                              save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                                 self.model_name),
-                                              model_name="grid_search:%s-%s" % (self.save_path_prefix, self.model_name))
+                                              model_name="grid_search:%s-%s" % (save_path_prefix, self.model_name))
                                 # load best weights for current configuration
-                                trainer.load_model("./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                            self.model_name))
                                 # get validation score for best weights
                                 val_score = trainer.test(val_loader,
@@ -395,18 +397,18 @@ class StandardMFModel(Model):
                                         "tr_batch_size": tr_batch_size
                                     }
                                     with open("./config/best_config/%s-%s.json"
-                                              % (self.save_path_prefix, self.model_name), "w") as outfile:
+                                              % (save_path_prefix, self.model_name), "w") as outfile:
                                         json.dump(config_dict, outfile, indent=4)
 
-    def run_experiment(self, data, seed, result_file_name, first_seed):
+    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
         if not os.path.exists("./saved_models/seed_%d" % seed):
             os.mkdir("./saved_models/seed_%d" % seed)
         # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             # we compute the grid search
-            self.grid_search(data, seed, first_seed)
+            self.grid_search(data, seed, save_path_prefix)
         # load best configuration of hyper-parameters
-        with open("./config_best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)) as json_file:
+        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
             best_config = json.load(json_file)
         set_seed(seed)
         # train the model with the best configuration
@@ -416,17 +418,17 @@ class StandardMFModel(Model):
         test_loader = ValDataLoader(data.test, batch_size=self.param_config['val_batch_size'])
         trainer = MFTrainer(model, Adam(model.parameters(), lr=best_config['lr'], weight_decay=best_config['wd']))
         # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, self.save_path_prefix, seed))
+        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
+            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
             trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                           n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
                           verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (self.save_path_prefix, self.model_name, seed))
+                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
+                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
         # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name))
+        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
         # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (self.save_path_prefix, self.model_name),
+        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
                               trainer.test(test_loader, self.param_config["test_metrics"]), seed)
 
 
@@ -435,23 +437,15 @@ class LTNMFModel(Model):
     Matrix factorization model trained using LTN. It uses a logic formula that forces the target ratings to be as
     similar as possible to the predicted ratings as an objective.
     """
-    def __init__(self, save_path_prefix):
-        super(LTNMFModel, self).__init__(save_path_prefix)
-        self.model_name = "ltn_mf"
-        assert os.path.exists("./config/%s.json" % self.model_name), "The configuration file for LTNMFModel does not " \
-                                                                     "exist. Please, add as to ./config/ltn_mf.json"
-        with open("./config/%s.json" % self.model_name) as json_file:
-            self.param_config = json.load(json_file)
+    def __init__(self, config_file_name="ltn_mf"):
+        super(LTNMFModel, self).__init__(config_file_name)
 
-    def grid_search(self, data, seed, first_seed):
-        if first_seed is None:
-            # if first_seed is None, the grid search has to be computed for each seed
-            first_seed = seed
-        if seed == first_seed:
+    def grid_search(self, data, seed, save_path_prefix):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             set_seed(seed)
             best_score = 0.0
             val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, self.save_path_prefix))
+            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
             for k in self.param_config["k"]:
                 for biased in self.param_config["biased"]:
                     for lr in self.param_config["lr"]:
@@ -459,7 +453,7 @@ class LTNMFModel(Model):
                             for tr_batch_size in self.param_config["tr_batch_size"]:
                                 for alpha in self.param_config["alpha"]:
                                     print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, "
-                                          "batch_size=%d, alpha=%.3f" % (self.model_name, self.save_path_prefix, k, biased,
+                                          "batch_size=%d, alpha=%.3f" % (self.model_name, save_path_prefix, k, biased,
                                                                          lr, wd, tr_batch_size, alpha))
                                     # train model with current configuration
                                     model = MatrixFactorization(data.n_users, data.n_items, k, biased)
@@ -469,11 +463,11 @@ class LTNMFModel(Model):
                                                   n_epochs=self.param_config["n_epochs"],
                                                   early=self.param_config["early_stop"],
                                                   verbose=self.param_config["verbose"],
-                                                  save_path="./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                                  save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                                     self.model_name),
-                                                  model_name="grid_search:%s-%s" % (self.save_path_prefix, self.model_name))
+                                                  model_name="grid_search:%s-%s" % (save_path_prefix, self.model_name))
                                     # load best weights for current configuration
-                                    trainer.load_model("./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                    trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                                self.model_name))
                                     # get validation score for best weights
                                     val_score = trainer.test(val_loader,
@@ -492,18 +486,18 @@ class LTNMFModel(Model):
                                             "alpha": alpha
                                         }
                                         with open("./config/best_config/%s-%s.json"
-                                                  % (self.save_path_prefix, self.model_name), "w") as outfile:
+                                                  % (save_path_prefix, self.model_name), "w") as outfile:
                                             json.dump(config_dict, outfile, indent=4)
 
-    def run_experiment(self, data, seed, result_file_name, first_seed):
+    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
         if not os.path.exists("./saved_models/seed_%d" % seed):
             os.mkdir("./saved_models/seed_%d" % seed)
         # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             # we compute the grid search
-            self.grid_search(data, seed, first_seed)
+            self.grid_search(data, seed, save_path_prefix)
         # load best configuration of hyper-parameters
-        with open("./config/best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)) as json_file:
+        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
             best_config = json.load(json_file)
         set_seed(seed)
         # train the model with the best configuration
@@ -514,17 +508,17 @@ class LTNMFModel(Model):
         trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=best_config['lr'], weight_decay=best_config['wd']),
                                best_config["alpha"])
         # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, self.save_path_prefix, seed))
+        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
+            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
             trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                           n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
                           verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (self.save_path_prefix, self.model_name, seed))
+                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
+                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
         # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name))
+        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
         # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (self.save_path_prefix, self.model_name),
+        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
                               trainer.test(test_loader, self.param_config["test_metrics"]), seed)
 
 
@@ -536,24 +530,15 @@ class LTNMFGenresModel(Model):
     In particular, for the movies that have not been rated by a user, it forces the score to be low if the user did not
     like a genre of that movie in the past.
     """
-    def __init__(self, save_path_prefix):
-        super(LTNMFGenresModel, self).__init__(save_path_prefix)
-        self.model_name = "ltn_mf_genres"
-        assert os.path.exists("./config/%s.json" % self.model_name), "The configuration file for LTNMFGenresModel " \
-                                                                     "does not exist. Please, add as " \
-                                                                     "to ./config/ltn_mf_genres.json"
-        with open("./config/%s.json" % self.model_name) as json_file:
-            self.param_config = json.load(json_file)
+    def __init__(self, config_file_name="ltn_mf_genres"):
+        super(LTNMFGenresModel, self).__init__(config_file_name)
 
-    def grid_search(self, data, seed, first_seed):
-        if first_seed is None:
-            # if first_seed is None, the grid search has to be computed for each seed
-            first_seed = seed
-        if seed == first_seed:
+    def grid_search(self, data, seed, save_path_prefix):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             set_seed(seed)
             best_score = 0.0
             val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, self.save_path_prefix))
+            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
             for k in self.param_config["k"]:
                 for biased in self.param_config["biased"]:
                     for lr in self.param_config["lr"]:
@@ -562,26 +547,28 @@ class LTNMFGenresModel(Model):
                                 for alpha in self.param_config["alpha"]:
                                     for p in self.param_config["p"]:
                                         print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, "
-                                              "batch_size=%d, alpha=%.3f, p=%d" % (self.model_name, self.save_path_prefix,k,
+                                              "batch_size=%d, alpha=%.3f, p=%d" % (self.model_name, save_path_prefix, k,
                                                                                    biased, lr, wd, tr_batch_size, alpha, p))
                                         # train model with current configuration
                                         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
-                                        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items,
+                                        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users,
+                                                                                data.n_items - data.n_genres,
                                                                                 data.n_genres, genre_sample_size=5,
                                                                                 batch_size=tr_batch_size)
                                         trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=lr,
                                                                                  weight_decay=wd), alpha, p,
-                                                                     data.n_items - data.n_genres, data.movie_genres_matrix)
+                                                                     data.n_items - data.n_genres,
+                                                                     data.item_genres_matrix)
                                         trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                                                       n_epochs=self.param_config["n_epochs"],
                                                       early=self.param_config["early_stop"],
                                                       verbose=self.param_config["verbose"],
-                                                      save_path="./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                                      save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                                         self.model_name),
-                                                      model_name="grid_search:%s-%s" % (self.save_path_prefix,
+                                                      model_name="grid_search:%s-%s" % (save_path_prefix,
                                                                                         self.model_name))
                                         # load best weights for current configuration
-                                        trainer.load_model("./saved_models/temporary/%s-%s.pth" % (self.save_path_prefix,
+                                        trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
                                                                                                    self.model_name))
                                         # get validation score for best weights
                                         val_score = trainer.test(val_loader,
@@ -601,39 +588,39 @@ class LTNMFGenresModel(Model):
                                                 "p": p
                                             }
                                             with open("./config/best_config/%s-%s.json"
-                                                      % (self.save_path_prefix, self.model_name), "w") as outfile:
+                                                      % (save_path_prefix, self.model_name), "w") as outfile:
                                                 json.dump(config_dict, outfile, indent=4)
 
-    def run_experiment(self, data, seed, result_file_name, first_seed):
+    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
         if not os.path.exists("./saved_models/seed_%d" % seed):
             os.mkdir("./saved_models/seed_%d" % seed)
         # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)):
+        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
             # we compute the grid search
-            self.grid_search(data, seed, first_seed)
+            self.grid_search(data, seed, save_path_prefix)
         # load best configuration of hyper-parameters
-        with open("./config/best_config/%s-%s.json" % (self.save_path_prefix, self.model_name)) as json_file:
+        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
             best_config = json.load(json_file)
         set_seed(seed)
         # train the model with the best configuration
         model = MatrixFactorization(data.n_users, data.n_items, best_config['k'], best_config['biased'])
-        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items, data.n_genres,
+        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items - data.n_genres, data.n_genres,
                                                 genre_sample_size=5, batch_size=best_config["tr_batch_size"])
         val_loader = ValDataLoader(data.val, batch_size=self.param_config['val_batch_size'])
         test_loader = ValDataLoader(data.test, batch_size=self.param_config['val_batch_size'])
         trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=best_config['lr'],
                                                  weight_decay=best_config['wd']), best_config["alpha"], best_config["p"],
-                                     data.n_items - data.n_genres, data.movie_genres_matrix)
+                                     data.n_items - data.n_genres, data.item_genres_matrix)
         # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, self.save_path_prefix, seed))
+        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
+            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
             trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                           n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
                           verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (self.save_path_prefix, self.model_name, seed))
+                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
+                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
         # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, self.save_path_prefix, self.model_name))
+        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
         # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (self.save_path_prefix, self.model_name),
+        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
                               trainer.test(test_loader, self.param_config["test_metrics"]), seed)

@@ -57,18 +57,13 @@ class Dataset:
 
 
 class DatasetWithGenres(Dataset):
-    def __init__(self, train, val, test, n_users, n_items, name, n_genres):
+    def __init__(self, train, val, test, n_users, n_items, name, n_genres, item_genres_matrix=None):
         super(DatasetWithGenres, self).__init__(train, val, test, n_users, n_items, name)
         self.n_genres = n_genres
-        self.item_genres_matrix = None
+        self.item_genres_matrix = item_genres_matrix
 
     def set_item_genres_matrix(self, item_genres_matrix):
         self.item_genres_matrix = item_genres_matrix
-
-    def set_item_genres_matrix_ret(self, item_genres_matrix):
-        d = self.__init__(self.train, self.val, self.test, self.n_users, self.n_items, self.name, self.n_genres)
-        d.set_item_genres_matrix(item_genres_matrix)
-        return d
 
 
 def send_query(query):
@@ -726,7 +721,7 @@ class DataManager:
 
         # unify user and item mappings
         idx_mapping = {"user": {"ml": user_mapping_ml, "mr": user_mapping_mr},
-                   "item": {"ml": ml_to_new_idx, "mr": mr_to_new_idx}}
+                       "item": {"ml": ml_to_new_idx, "mr": mr_to_new_idx}}
 
         return dataset_ratings, movie_genres_matrix, mr_genre_ratings, idx_mapping
 
@@ -908,7 +903,8 @@ class DataManager:
 
         return Dataset(train, validation, test, n_users, n_items, name="ml")
 
-    def get_fusion_folds_given_ml_folds(self, train_set, ml_val, ml_test, idx_mapping=None, genre_ratings=None):
+    def get_fusion_folds_given_ml_folds(self, train_set, ml_val, ml_test, idx_mapping=None, genre_ratings=None,
+                                        item_genres_matrix=None):
         """
         It constructs the train, validation, and test set for the dataset which is the fusion between ml-100k and
         MindReader datasets.
@@ -922,6 +918,9 @@ class DataManager:
         If parameter `genre_ratings` is different from None (np.array of genre ratings is given), the function returns
         also a np.array containing the ratings for the genres. Take into account that since some users have only
         rated genres, the number of users between the two configurations might be different.
+
+        If parameter `genre_ratings` is not None, `item_genres_matrix` should not be None. It is an itemsXgenres sparse
+        matrix containing the genres of each movie.
         """
         # todo e' qui che dovrei lasciare dei generi in test se voglio fare la verifica
         fusion_val = ml_val
@@ -946,6 +945,8 @@ class DataManager:
         fusion_train = np.array([[rating["u_idx"], rating["i_idx"], rating["rate"]]
                                  for rating in train_set_dict if [rating["u_idx"], rating["i_idx"]] not in to_remove])
         if genre_ratings is not None:
+            assert item_genres_matrix is not None, "Parameter item_genres_matrix is None even if genre_ratings is " \
+                                                   "not None. Please, pass a itemXgenres matrix."
             n_users = len(set(train_set["u_idx"].unique()) | set(genre_ratings[:, 0]))
             n_items = train_set["i_idx"].nunique() + len(set(genre_ratings[:, 1]))  # we consider genres as items
             n_movies = train_set["i_idx"].nunique()
@@ -956,7 +957,7 @@ class DataManager:
             return DatasetWithGenres(np.concatenate([fusion_train, new_genre_ratings], axis=0),
                                      fusion_val, fusion_test, n_users, n_items,
                                      name="ml|mr(movies+genres)" if idx_mapping is not None else "ml(movies)|mr(genres)",
-                                     n_genres=len(self.genres))
+                                     n_genres=len(self.genres), item_genres_matrix=item_genres_matrix)
 
-        return DatasetWithGenres(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
-                                 train_set["i_idx"].nunique(), name="ml|mr(movies)", n_genres=len(self.genres))
+        return Dataset(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
+                       train_set["i_idx"].nunique(), name="ml|mr(movies)")
