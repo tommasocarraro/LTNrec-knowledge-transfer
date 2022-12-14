@@ -6,8 +6,13 @@ from ltnrec.metrics import compute_metric, check_metrics
 from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres
 import json
 from torch.optim import Adam
-from ltnrec.utils import append_to_result_file, set_seed
+from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
 import wandb
+import pickle
+
+# create global wandb api object
+api = wandb.Api()
+api.entity = "bmxitalia"
 
 
 class MatrixFactorization(torch.nn.Module):
@@ -72,16 +77,19 @@ class Trainer:
         :param verbose: number of epochs to wait for printing training details (every 'verbose' epochs)
         :param save_path: path where to save the best model, default to None
         :param model_name: name of model. It is used for printing model information in the log. It is useful when
-        concurrency is used to train simultaneously.
-        :param wandb_train: whether the training is done on Weights and Biases or not.
+        concurrency is used to train simultaneously, so we need to distinguish among different concurrent runs
+        :param wandb_train: whether the training is done with Weights and Biases or not
         """
+        if wandb_train:
+            # log gradients and parameters with Weights and Biases
+            wandb.watch(self.model, log="all")
         best_val_score = 0.0
         early_counter = 0
         check_metrics(val_metric)
 
         for epoch in range(n_epochs):
             # training step
-            train_loss = self.train_epoch(train_loader)
+            train_loss, log_dict = self.train_epoch(train_loader)
             # validation step
             val_score = self.validate(val_loader, val_metric)
             # print epoch data
@@ -89,18 +97,21 @@ class Trainer:
                 log_record = "Epoch %d - Train loss %.3f - Validation %s %.3f" % (epoch + 1, train_loss, val_metric,
                                                                                   val_score)
                 if model_name is not None:
-                    log_record = ("%s : " % model_name) + log_record
-                if wandb_train:
-                    wandb.log({
-                        'val_%s' % (val_metric, ): val_score
-                    })
+                    # add model name to log information if model name is available
+                    log_record = ("%s: " % (model_name, )) + log_record
                 print(log_record)
+                if wandb_train:
+                    # add to the log_dict returned from the training of the epoch (this information is different for
+                    # every model) the information about the validation metric
+                    log_dict["%s" % (val_metric, )] = val_score
+                    # log all stored information
+                    wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
             if val_score > best_val_score:
                 best_val_score = val_score
                 early_counter = 0
                 if save_path:
-                    self.save_model(save_path)
+                    self.save_model(save_path, wandb_train)
             else:
                 early_counter += 1
                 if early is not None and early_counter > early:
@@ -111,7 +122,8 @@ class Trainer:
         """
         Method for the training of one single epoch.
         :param train_loader: data loader for training data
-        :return: training loss value averaged across training batches
+        :return: training loss value averaged across training batches and a dictionary containing useful information
+        to log, such as other metrics computed by this model
         """
         raise NotImplementedError()
 
@@ -133,15 +145,20 @@ class Trainer:
         """
         raise NotImplementedError()
 
-    def save_model(self, path):
+    def save_model(self, path, wandb_train=False):
         """
         Method for saving the model.
         :param path: path where to save the model
+        :param wandb_train: whether the train is done with wandb or not. If True, it also creates a best model artifact.
         """
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
         }, path)
+        if wandb_train:
+            model_artifact = wandb.Artifact("model-%s" % (path.split("/")[-1].split(".")[0]), type="model")
+            model_artifact.add_file(path)
+            wandb.log_artifact(model_artifact)
 
     def load_model(self, path):
         """
@@ -185,7 +202,7 @@ class MFTrainer(Trainer):
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-        return train_loss / len(train_loader)
+        return train_loss / len(train_loader), {"training_mse": train_loss / len(train_loader)}
 
     def predict(self, x, dim=1, normalize=False):
         """
@@ -258,7 +275,7 @@ class LTNTrainerMF(MFTrainer):
             self.optimizer.step()
             train_loss += train_sat.item()
 
-        return train_loss / len(train_loader)
+        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader)}
 
 
 class LTNTrainerMFGenres(LTNTrainerMF):
@@ -296,21 +313,25 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx - n_movies])
 
     def train_epoch(self, train_loader):
-        train_loss = 0.0
+        train_loss, f1_sat, f2_sat = 0.0, 0.0, 0.0
         for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r))
+            f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
             f2 = self.Forall(ltn.diag(u2, i2),
                              self.Forall(g, self.Implies(
                                  self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
-                                 self.Sim(self.Likes(u2, i2), r_))))
+                                 self.Sim(self.Likes(u2, i2), r_)))).value
             train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
             train_loss += train_sat.item()
+            f1_sat += f1.item()
+            f2_sat += f2.item()
 
-        return train_loss / len(train_loader)
+        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader),
+                                                "training_sat_axiom_1": f1_sat / len(train_loader),
+                                                "training_sat_axiom_2": f2_sat / len(train_loader)}
 
 
 class Model:
@@ -339,6 +360,246 @@ class Model:
         """
         pass
 
+    def grid_search_wandb(self, dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project):
+        """
+        It performs a grid search of the model using a Weights and Biases sweep.
+        The dataset_id is used to set the seed for the experiment and also for downloading the dataset artifact from
+        wandb servers.
+        The grid search is performed using random search with early stopping. The configuration file for each model has
+        to be stored in ./config. The configuration file specifies the hyper-parameters that have to be tested in the
+        sweep (they are stored under the key `sweep_config` which specifies also the sweep strategy (random search))
+        as well as the parameters for the training, evaluation and test of the model. The random search is performed for
+        the number of run specified in the configuration file under the key `search_n_iter`.
+
+        :param dataset_id: name of the dataset artifact in wandb (mode-dataset_name-n_neg-seed)
+        :param local_dataset_path_prefix: local dataset path prefix. It is used to download the dataset artifact there
+        :param local_config_path_prefix: local configuration path prefix. It is where the best configuration JSON files
+        are saved
+        :param wandb_project: name of the wandb project
+        :return:
+        """
+        try:
+            # check if a best configuration artifact for this model and dataset already exists
+            api.artifact("%s/config-model:%s-dataset:%s:latest" % (wandb_project, self.model_name,
+                                                                   remove_seed_from_dataset_name(dataset_id)))
+            print("Grid search for model:%s-dataset:%s has been already performed. Find the config"
+                  "artifact at config/config-model:%s-dataset:%s" % (self.model_name, dataset_id, self.model_name,
+                                                                     remove_seed_from_dataset_name(dataset_id)))
+        except wandb.errors.CommError:
+            # if the best configuration artifact does not exists, we have to run a grid search for this model and
+            # dataset
+            # create the sweep for this grid search
+            # take sweep config
+            sweep_config = self.param_config["sweep_config"]
+            # add sweep name to the config
+            sweep_config["name"] = "grid_search:model:%s-dataset:%s" % (self.model_name, dataset_id)
+            # create the sweep object and get the sweep identifier
+            sweep_id = wandb.sweep(sweep=sweep_config, project=wandb_project)
+
+            def single_run():
+                """
+                This function defines a single grid search run with randomly sampled hyper-parameter values.
+                """
+                # create a wandb run for performing this single grid search run
+                with wandb.init(project=wandb_project, job_type="grid_search") as run:
+                    # get artifact for this run
+                    run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(
+                        local_dataset_path_prefix)
+                    # load the dataset from disk
+                    with open("%s/%s" % (local_dataset_path_prefix, dataset_id,), 'rb') as dataset_file:
+                        dataset = pickle.load(dataset_file)
+                    # run the train of the model
+                    self.grid_search_train(run, dataset_id, dataset)
+
+            # set seed for reproducible experiments
+            set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
+            # run the wandb agent that will perform the sweep
+            wandb.agent(sweep_id, function=single_run, count=self.param_config["search_n_iter"])
+
+            # create an artifact for saving the best configuration of hyper-parameters
+            best_config = api.sweep("%s/%s" % (wandb_project, sweep_id)).best_run().config
+            print("Saving best hyper-parameters "
+                  "configuration file at %s/config-model:%s-dataset:%s.json" % (local_config_path_prefix, self.model_name,
+                                                                                remove_seed_from_dataset_name(dataset_id)))
+            with open("%s/config-model:%s-dataset:%s.json" % (local_config_path_prefix, self.model_name,
+                                                              remove_seed_from_dataset_name(dataset_id)), "w") as outfile:
+                json.dump(best_config, outfile, indent=4)
+            # create artifact with best configuration
+            print("Creating model config artifact config-model:%s-dataset:%s on project %s" % (self.model_name,
+                                                                                               remove_seed_from_dataset_name(dataset_id),
+                                                                                               wandb_project))
+            with wandb.init(project=wandb_project, job_type="upload_best_model_config") as run:
+                run.name = "upload_best_model_config:model:%s-dataset:%s" % (self.model_name, remove_seed_from_dataset_name(dataset_id))
+                config_artifact = wandb.Artifact("config-model:%s-dataset:%s" % (self.model_name, remove_seed_from_dataset_name(dataset_id)),
+                                                 type="model_config")
+                config_artifact.add_file("%s/config-model:%s-dataset:%s.json" % (local_config_path_prefix,
+                                                                                 self.model_name, remove_seed_from_dataset_name(dataset_id)))
+                run.log_artifact(config_artifact)
+
+    def grid_search_train(self, wandb_run, dataset_id, data):
+        """
+        It implements the training procedure of the grid search done using a wandb sweep.
+
+        This method will differ among models.
+
+        :param wandb_run: wandb run that has to run the train
+        :param dataset_id: name of the dataset, used to log
+        :param data: dataset on which the grid search run has to be computed
+        :return:
+        """
+        pass
+
+    def train_model_wandb(self, dataset_id, local_dataset_path_prefix, local_config_path_prefix,
+                          local_model_path_prefix, wandb_project):
+        """
+        It performs the training of the model with the best configuration of hyper-parameters found using a grid search.
+        If a best configuration wandb artifact does not exist for this model already, the method automatically calls the
+        grid search procedure for this model in such a way to create a best configuration file.
+
+        The dataset_id is used to set the seed for the training and also for downloading the dataset artifact from
+        wandb servers.
+
+        The training is performed with the hyper-parameters specified in the best configuration file and with the
+        parameters specified in the corresponding configuration file contained in ./config.
+
+        The training procedure creates a best model artifact on Weights and Biases for future use. Also, it creates a
+        result artifact, containing a JSON file that reports the test metrics connected to this training procedure.
+
+        :param dataset_id: name of the dataset artifact in wandb (mode-dataset_name-n_neg-seed)
+        :param local_dataset_path_prefix: local dataset path prefix. It is used to download the dataset artifact there
+        :param local_config_path_prefix: local configuration path prefix. It is where the best configuration JSON files
+        are stored
+        :param local_model_path_prefix: local model path prefix. It is where the best model file is stored
+        :param wandb_project: name of the wandb project
+        :return:
+        """
+        try:
+            # check if a best model file for this model already exists
+            api.artifact("%s/model-model:%s-dataset:%s:latest" % (wandb_project, self.model_name, dataset_id))
+            print("Best model training for model:%s-dataset:%s has been already performed. Find the model artifact"
+                  "at model/model-model:%s-dataset:%s and result artifact at result/result-model:%s-dataset:%s" %
+                  (self.model_name, dataset_id, self.model_name, dataset_id, self.model_name, dataset_id))
+        except wandb.errors.CommError:
+            # if the best model file does not exist, we have to perform the training for this model
+            try:
+                # check if a best configuration artifact for this model and dataset already exists
+                api.artifact("%s/config-model:%s-dataset:%s:latest" % (wandb_project, self.model_name, remove_seed_from_dataset_name(dataset_id)))
+            except wandb.errors.CommError:
+                # if the best configuration artifact does not exists, we have to run a grid search for this model and
+                # dataset
+                # call the grid search procedure
+                self.grid_search_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project)
+
+            # set seed from reproducibility
+            set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last character in the string
+            # if the best configuration file already exists or it has been just created by calling the grid search, we
+            # can train the model with the hyper-parameters specified in the configuration
+            with wandb.init(project=wandb_project, job_type="model_training") as run:
+                run.name = "model_training:model:%s-dataset:%s" % (self.model_name, dataset_id)
+                # download the best configuration file artifact
+                run.use_artifact("%s/config-model:%s-dataset:%s:latest" % (wandb_project, self.model_name,
+                                                                           remove_seed_from_dataset_name(dataset_id))).download(
+                    local_config_path_prefix
+                )
+                # load hyper-parameters values from configuration file
+                with open("%s/config-model:%s-dataset:%s.json" % (local_config_path_prefix, self.model_name,
+                                                                  remove_seed_from_dataset_name(dataset_id))) as json_file:
+                    best_config = json.load(json_file)
+                # download dataset artifact for performing the training of the model
+                run.use_artifact("%s/%s" % (wandb_project, dataset_id)).download(local_dataset_path_prefix)
+                # load dataset
+                with open("%s/%s" % (local_dataset_path_prefix, dataset_id), 'rb') as dataset_file:
+                    dataset = pickle.load(dataset_file)
+                # train the model on the downloaded dataset with the download best configuration
+                # this method will also upload a best model artifact on Weights and Biases
+                self.train_model(dataset, dataset_id, best_config, local_model_path_prefix)
+
+    def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
+        """
+        It performs the training of the model on the given dataset with the given configuration of hyper-parameters.
+        It saved the best model on the given path and also creates an artifact for the best model on Weights and Biases.
+
+        :param data: dataset on which the training has to be performed
+        :param dataset_id: name of dataset used to log information while training
+        :param best_config: best configuration to load the hyper-parameters values
+        :param local_model_path_prefix: local model path where to save the best model
+        :return:
+        """
+        pass
+
+    def test_model_wandb(self, dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
+                         local_result_path_prefix, wandb_project):
+        """
+        It tests the performances of a trained model on the test set. After the test of the model has been done, it
+        creates a wandb artifact that contains a JSON file reporting the test metrics.
+
+        Before testing the model, it loads the model from a best model artifact. If a best model artifact does not
+        exist for this model, it raises an exception.
+
+        Parameter dataset_id is used to download the corresponding dataset artifact in such a way to perform the test
+        of the model.
+
+        :param dataset_id: name of the dataset artifact in wandb (mode-dataset_name-n_neg-seed)
+        :param local_dataset_path_prefix: local dataset path prefix. It is used to download the dataset artifact there
+        :param local_config_path_prefix: local config path prefic. It is used to download the best configuration file
+        there. The configuration serves to create the model and load the weights.
+        :param local_model_path_prefix: local model path prefix. It is where the best model file is stored
+        :param local_result_path_prefix: local result path prefix. It is where the result file is stored
+        :param wandb_project: name of the wandb project
+        :return:
+        """
+        try:
+            # check if a result artifact for this model already exists
+            api.artifact("%s/result-model:%s-dataset:%s:latest" % (wandb_project, self.model_name, dataset_id))
+        except wandb.errors.CommError:
+            # if it does not exists, we have to create it
+            try:
+                # check if a best model artifact for this model already exists
+                api.artifact("%s/model-model:%s-dataset:%s:latest" % (wandb_project, self.model_name, dataset_id))
+            except wandb.errors.CommError:
+                raise ValueError("Best model artifact model-model:%s-dataset:%s does not exist. You should train"
+                                 "the model before testing it." % (self.model_name, dataset_id))
+            # if the best model artifact exists, we can run the test of the model
+            with wandb.init(project=wandb_project, job_type="model_test") as run:
+                # set the run name
+                run.name = "model_test:model:%s-dataset:%s" % (self.model_name, dataset_id)
+                # download the dataset artifact
+                run.use_artifact("%s/%s" % (wandb_project, dataset_id)).download(local_dataset_path_prefix)
+                # load the dataset from disk
+                with open("%s/%s" % (local_dataset_path_prefix, dataset_id), 'rb') as dataset_file:
+                    dataset = pickle.load(dataset_file)
+                # download the best model artifact
+                run.use_artifact("%s/model-model:%s-dataset:%s" % (wandb_project,
+                                                                   self.model_name, dataset_id)).download(
+                    local_model_path_prefix
+                )
+                # download the best configuration file artifact
+                run.use_artifact("%s/config-model:%s-dataset:%s:latest" % (wandb_project, self.model_name,
+                                                                           remove_seed_from_dataset_name(dataset_id))).download(
+                    local_config_path_prefix
+                )
+                # load hyper-parameters values from configuration file
+                with open("%s/config-model:%s-dataset:%s.json" % (local_config_path_prefix, self.model_name,
+                                                                  remove_seed_from_dataset_name(dataset_id))) as json_file:
+                    best_config = json.load(json_file)
+                # test the model - it also loads the best model file on the torch model and creates the result artifact
+                self.test_model(dataset, dataset_id, best_config, local_model_path_prefix, local_result_path_prefix)
+
+    def test_model(self, data, dataset_id, best_config, local_model_path_prefix, local_result_path_prefix):
+        """
+        It performs the test of the model on the given dataset and saves the results at the given path.
+        It constructs the model with the best configuration and loads the best weights.
+
+        :param data: dataset on which the performances have to be tested
+        :param dataset_id: name of dataset used to load the best model file
+        :param best_config: best configuration dictionary, used to create the model to then loads the best weights
+        :param local_model_path_prefix: local model path prefix. It is used to find the best model file on disk
+        :param local_result_path_prefix: local result path prefix. It is the path where the result file of this test has
+        to be saved
+        :return:
+        """
+        pass
+
     def run_experiment(self, data, seed, save_path_prefix, result_file_name):
         """
         It trains and tests the model. To train the model, it uses the hyper-parameters specified in the config file
@@ -354,6 +615,62 @@ class StandardMFModel(Model):
     """
     def __init__(self, config_file_name="standard_mf"):
         super(StandardMFModel, self).__init__(config_file_name)
+
+    def grid_search_train(self, wandb_run, dataset_id, data):
+        # get a random hyper-parameter configuration to be tested
+        k = wandb.config.k
+        biased = wandb.config.biased
+        lr = wandb.config.lr
+        tr_batch_size = wandb.config.tr_batch_size
+        wd = wandb.config.wd
+
+        # change run name for log purposes
+        wandb_run.name = "grid_search:model:%s-dataset:%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d,wd=%.4f" % \
+                         (self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd)
+
+        # train model with current configuration
+        model = MatrixFactorization(data.n_users, data.n_items, k, biased)
+        tr_loader = TrainingDataLoader(data.train, tr_batch_size)
+        val_loader = ValDataLoader(data.val, 512)
+        trainer = MFTrainer(model, Adam(model.parameters(), lr=lr, weight_decay=wd))
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name=wandb_run.name, early=self.param_config["early_stop"])
+
+    def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
+        # train model with best configuration
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        tr_loader = TrainingDataLoader(data.train, best_config["tr_batch_size"])
+        val_loader = ValDataLoader(data.val, 512)
+        trainer = MFTrainer(model, Adam(model.parameters(), lr=best_config["lr"], weight_decay=best_config["wd"]))
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name="model_training:model:%s-dataset:%s" % (self.model_name, dataset_id),
+                      early=self.param_config["early_stop"],
+                      save_path="%s/model-model:%s-dataset:%s.pth" % (local_model_path_prefix, self.model_name,
+                                                                      dataset_id))
+
+    def test_model(self, data, dataset_id, best_config, local_dataset_path_prefix, local_result_path_prefix):
+        # create test loader and model
+        test_loader = ValDataLoader(data.test, self.param_config["val_batch_size"])
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        trainer = MFTrainer(model, Adam(model.parameters(), lr=best_config["lr"], weight_decay=best_config["wd"]))
+        # load best weights on the model
+        trainer.load_model("%s/model-model:%s-dataset:%s.pth" % (local_dataset_path_prefix, self.model_name,
+                                                                 dataset_id))
+        # test the model
+        metrics_dict = trainer.test(test_loader, self.param_config["test_metrics"])
+        # create the result JSON file and save it on disk
+        with open("%s/result-model:%s-dataset:%s.json" % (local_result_path_prefix,
+                                                          self.model_name, dataset_id), "w") as outfile:
+            json.dump(metrics_dict, outfile, indent=4)
+        # create result artifact
+        result_artifact = wandb.Artifact("result-model:%s-dataset:%s" % (self.model_name, dataset_id), type="result")
+        result_artifact.add_file("%s/result-model:%s-dataset:%s.json" % (local_result_path_prefix, self.model_name,
+                                                                         dataset_id))
+        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
@@ -439,6 +756,30 @@ class LTNMFModel(Model):
     """
     def __init__(self, config_file_name="ltn_mf"):
         super(LTNMFModel, self).__init__(config_file_name)
+
+    def grid_search_train(self, wandb_run, dataset_id, data):
+        # get a random hyper-parameter configuration to be tested
+        k = wandb.config.k
+        biased = wandb.config.biased
+        lr = wandb.config.lr
+        tr_batch_size = wandb.config.tr_batch_size
+        wd = wandb.config.wd
+        p = wandb.config.p
+
+        # change run name for log purposes
+        wandb_run.name = "grid_search:model:%s-dataset:%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
+                         "wd=%.4f,p=%d" % (self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p)
+
+        # train model with current configuration
+        model = MatrixFactorization(data.n_users, data.n_items, k, biased)
+        tr_loader = TrainingDataLoaderLTN(data.train, tr_batch_size)
+        val_loader = ValDataLoader(data.val, 512)
+        trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=lr, weight_decay=wd),
+                               alpha=self.param_config["alpha"], p=p)
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name=wandb_run.name, early=self.param_config["early_stop"])
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
@@ -532,6 +873,34 @@ class LTNMFGenresModel(Model):
     """
     def __init__(self, config_file_name="ltn_mf_genres"):
         super(LTNMFGenresModel, self).__init__(config_file_name)
+
+    def grid_search_train(self, wandb_run, dataset_id, data):
+        # get a random hyper-parameter configuration to be tested
+        k = wandb.config.k
+        biased = wandb.config.biased
+        lr = wandb.config.lr
+        tr_batch_size = wandb.config.tr_batch_size
+        wd = wandb.config.wd
+        p = wandb.config.p
+        n_sampled_genres = wandb.config.n_sampled_genres
+
+        # change run name for log purposes
+        wandb_run.name = "grid_search:model:%s-dataset:%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
+                         "wd=%.4f,p=%d,n_sampled_genres=%d" % (self.model_name, dataset_id, k, biased, lr,
+                                                               tr_batch_size, wd, p, n_sampled_genres)
+
+        # train model with current configuration
+        model = MatrixFactorization(data.n_users, data.n_items, k, biased)
+        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items, data.n_genres,
+                                                n_sampled_genres, tr_batch_size)
+        val_loader = ValDataLoader(data.val, 512)
+        trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=lr, weight_decay=wd),
+                                     alpha=self.param_config["alpha"], p=p, n_movies=data.n_items - data.n_genres,
+                                     item_genres_matrix=data.item_genres_matrix)
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name=wandb_run.name, early=self.param_config["early_stop"])
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):

@@ -1,13 +1,21 @@
 {
-  "k": [1, 5, 10],
-  "biased": [false, true],
-  "lr": [0.001],
-  "wd": [0.0001],
-  "tr_batch_size": [64, 128, 256],
+  "sweep_config": {
+  "method": "random",
+  "metric": {"goal": "maximize", "name": "hit@10"},
+  "parameters":
+      {
+        "tr_batch_size": {"values": [64, 128, 256, 512]},
+        "k": {"values": [1, 5, 10, 20, 30]},
+        "lr": {"values": [0.0005, 0.0001, 0.001, 0.005, 0.05, 0.01]},
+        "biased": {"values": [0, 1]},
+        "wd": {"values": [0.0001, 0.0005, 0.001]}
+      }
+    },
+  "search_n_iter": 15,
   "val_batch_size": 512,
-  "val_metric": "hit@10",
   "n_epochs": 100,
   "early_stop": 10,
   "verbose": 1,
+  "val_metric": "hit@10",
   "test_metrics": ["hit@10", "ndcg@10"]
 }

@@ -72,6 +72,9 @@ class TrainingDataLoaderLTNGenres:
         :param batch_size: batch size for the training of the model
         :param shuffle: whether to shuffle data during training or not
         """
+        assert genre_sample_size <= n_genres, "You cannot set `genre_sample_size` greater than `n_genres`. The number" \
+                                              "of sampled genres cannot exceed the number of available genres in" \
+                                              "the dataset."
         self.movie_ratings = np.array(movie_ratings)
         self.batch_size = batch_size
         self.shuffle = shuffle
