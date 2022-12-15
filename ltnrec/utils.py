@@ -27,7 +27,7 @@ def remove_seed_from_dataset_name(dataset_name):
     :param dataset_name: name of the dataset
     :return:
     """
-    return "-".join(dataset_name.split("-")[-1])
+    return "-".join(dataset_name.split("-")[:-1])
 
 
 def append_to_result_file(file_name, experiment_name, result, seed):

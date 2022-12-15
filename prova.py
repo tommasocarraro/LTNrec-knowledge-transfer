@@ -43,8 +43,8 @@ def train(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix
                             wandb_project)
 
 
-def test(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
-         local_result_path_prefix, wandb_project):
+def model_test(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
+               local_result_path_prefix, wandb_project):
     # if not (isinstance(model, LTNMFGenresModel) and not isinstance(data, DatasetWithGenres)):
     # todo gestire il fatto che non posso lanciarla se il dataset non e' compatibile, sfruttare il nome del dataset
     model.test_model_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
@@ -257,13 +257,13 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
                                  for seed in range(starting_seed, starting_seed + n_runs))
 
     # test every model on every dataset with every seed with best model files obtained
-    Parallel(n_jobs=num_workers)(delayed(test)(model,
-                                               "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed),
-                                               local_dataset_path_prefix,
-                                               local_config_path_prefix,
-                                               local_model_path_prefix,
-                                               local_result_path_prefix,
-                                               wandb_project)
+    Parallel(n_jobs=num_workers)(delayed(model_test)(model,
+                                                     "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed),
+                                                     local_dataset_path_prefix,
+                                                     local_config_path_prefix,
+                                                     local_model_path_prefix,
+                                                     local_result_path_prefix,
+                                                     wandb_project)
                                  for model in models_list
                                  for mode in evaluation_modes
                                  for dataset_name in training_folds
@@ -273,6 +273,12 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
     # todo cercare il discorso di logging
     # todo fare una funzione utilita' che va a pescare tutti i result artifacts e mi crea un result artifact overall
     # todo capire come posso sovrascrivere una grid search per un dataset con un nuovo seed
+    # todo mettere i messaggi di log come quelli per la creazione dei dataset in tutte le procedure
+    # todo potrei salvare il miglior modello anche sulle grid search, solo il migliore ogni volta, cosi avviene
+    #  versioning anche li
+    # todo vorrei poter fare le grid search che voglio ma anche non doverla fare
+    # todo capire bene cosa succede quando lancio la grid search direttamente dal training
+    # todo idea: se esiste un best config artifact, allora seleziono quello per fare il training
     # wandb.login()
     # wandb.init(project='prova')
     #
@@ -302,11 +308,16 @@ if __name__ == '__main__':
                    local_dataset_path_prefix="./datasets/experiment-folds",
                    local_config_path_prefix="./config/best_config",
                    local_model_path_prefix="./saved_models/models",
-                   local_result_path_prefix="/results/results",
-                   starting_seed=0, n_runs=2)
+                   local_result_path_prefix="./results/results",
+                   evaluation_modes="ml",
+                   training_folds="ml",
+                   models="standard_mf",
+                   starting_seed=0, n_runs=1)
     # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
     # todo applicare un metodo tipo optuna o wandb e verificare se ci sono parametri migliori
     # todo forse bisognerebbe usare il logger per fare in modo che le cose vengano loggate correttamente anche su wandb
+    # todo vorrei una struttura un po' meglio per i file
+    # todo non mi piacere vedere tutte le run di una grid search per ogni modello, vorrei vedere solo una grid search per modello
     # report_dict = create_report_dict(starting_seed=0, n_runs=30, exp_name="experiment")
     # pprint.pprint(report_dict)
     # generate_report_table(report_dict, metrics=("ndcg@10",))
