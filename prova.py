@@ -35,20 +35,20 @@ def grid_search(model, dataset_id, local_dataset_path_prefix, local_config_path_
     model.grid_search_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project)
 
 
-def train(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
+def train(model, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
           wandb_project):
     # if not (isinstance(model, LTNMFGenresModel) and not isinstance(data, DatasetWithGenres)):
     # todo gestire il fatto che non posso lanciarla se il dataset non e' compatibile, sfruttare il nome del dataset
-    model.train_model_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
-                            wandb_project)
+    model.train_model_wandb(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+                            local_model_path_prefix, wandb_project)
 
 
-def model_test(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
-               local_result_path_prefix, wandb_project):
+def model_test(model, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+               local_model_path_prefix, local_result_path_prefix, wandb_project):
     # if not (isinstance(model, LTNMFGenresModel) and not isinstance(data, DatasetWithGenres)):
     # todo gestire il fatto che non posso lanciarla se il dataset non e' compatibile, sfruttare il nome del dataset
-    model.test_model_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
-                           local_result_path_prefix, wandb_project)
+    model.test_model_wandb(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+                           local_model_path_prefix, local_result_path_prefix, wandb_project)
 
 
 def get_dataset_by_name(ml_dataset, name):
@@ -89,22 +89,19 @@ def get_dataset_by_name(ml_dataset, name):
 #     dataset_artifact.add_file(dataset_local_path, name=artifact_file_name)
 #     run.log_artifact(dataset_artifact)
 
-def create_dataset_artifact(ml_dataset, dataset_name, artifact_name, dataset_local_path, wandb_project):
-    with wandb.init(project=wandb_project, job_type="create_dataset") as run:
-        run.name = "create_dataset:%s" % (artifact_name, )
+def create_dataset_artifact(ml_dataset, dataset_name, artifact_name, wandb_project):
+    with wandb.init(project=wandb_project, job_type="create_dataset",
+                    name="create_dataset:%s" % (artifact_name, )) as run:
+        print("Creating dataset artifact %s" % (artifact_name, ))
+        # create artifact to host the dataset
         dataset_artifact = wandb.Artifact(artifact_name, type="dataset")
-        # check if dataset already exists locally
-        if not os.path.exists(dataset_local_path):
-            # we create the dataset file if it does not exist
-            dataset = get_dataset_by_name(ml_dataset, dataset_name)
-            with open(dataset_local_path, 'wb') as dataset_file:
-                # write dataset on disk
-                print("Creating local file %s" % (dataset_local_path,))
-                pickle.dump(dataset, dataset_file)
-        dataset_artifact.add_file(dataset_local_path)
-        # save the artifact on wandb
-        print("Creating dataset artifact %s on project %s" % (artifact_name, wandb_project))
+        # generate requested dataset from ml-100k
+        dataset = get_dataset_by_name(ml_dataset, dataset_name)
+        # add dataset pickle file to the created artifact
+        with dataset_artifact.new_file(artifact_name, 'wb') as dataset_file:
+            pickle.dump(dataset, dataset_file)
         run.log_artifact(dataset_artifact)
+        run.finish()
 
 
 def create_datasets(mode, training_folds, seed, n_neg, wandb_project, local_path_prefix):
@@ -122,37 +119,38 @@ def create_datasets(mode, training_folds, seed, n_neg, wandb_project, local_path
     :param wandb_project: name of the wandb project where the dataset artifacts have to be uploaded
     :param local_path_prefix: local path prefix where the created dataset files have to be stored
     """
+    ml_dataset = None
     try:
         # check if artifact for ml-ml-n_neg with current seed already exists
         api.artifact("%s/%s-ml-%d-seed_%d:latest" % (wandb_project, mode, n_neg, seed))
     except wandb.errors.CommError:
         # if the exception is raised, it means that the dataset artifact has to be created
         ml_dataset = data_manager.get_ml100k_folds(seed, mode, n_neg=n_neg)
-        create_dataset_artifact(ml_dataset, "ml", "%s-ml-%d-seed_%d" % (mode, n_neg, seed),
-                                "%s/%s-ml-%d-seed_%d" % (local_path_prefix, mode, n_neg, seed), wandb_project)
+        create_dataset_artifact(ml_dataset, "ml", "%s-ml-%d-seed_%d" % (mode, n_neg, seed), wandb_project)
 
     # create and upload all the requested datasets
     for dataset_name in training_folds:
         try:
             # check if dataset artifact already exists
             api.artifact("%s/%s-%s-%d-seed_%d:latest" % (wandb_project, mode, dataset_name, n_neg, seed))
-            print("Dataset %s-%s-%d-seed_%d has been already created. Find the dataset "
-                  "artifact at dataset/%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed, mode, dataset_name,
-                                                            n_neg, seed))
         except wandb.errors.CommError:
             # if the exception is raised, it means that the dataset artifact has to be created
-            # get ml-100k dataset artifact if the file is not saved locally, and create the file
-            if not os.path.exists("%s/%s-ml-%d-seed_%d" % (local_path_prefix, mode, n_neg, seed)):
-                with wandb.init(project=wandb_project, job_type="get_dataset") as run:
-                    run.name = "get_dataset:%s-ml%d-seed_%d" % (mode, n_neg, seed)
-                    run.use_artifact("%s-ml-%d-seed_%d:latest" % (mode, n_neg, seed)).download(local_path_prefix)
+            # ml-100k is needed here to create the other datasets
+            if ml_dataset is None:
+                # it means the ml-ml artifact has been already created and we need to download it
+                if not os.path.exists("%s/%s-ml-%d-seed_%d" % (local_path_prefix, mode, n_neg, seed)):
+                    # get ml-100k dataset artifact if the file is not saved locally, and create the file
+                    with wandb.init(project=wandb_project, job_type="get_dataset",
+                                    name="get_dataset:%s-ml%d-seed_%d" % (mode, n_neg, seed)) as run:
+                        print("Downloading dataset artifact %s-ml-%d-seed_%d" % (mode, n_neg, seed))
+                        run.use_artifact("%s-ml-%d-seed_%d:latest" % (mode, n_neg, seed)).download(local_path_prefix)
+                        run.finish()
 
-            # get ml-100k dataset
-            with open("%s/%s-ml-%d-seed_%d" % (local_path_prefix, mode, n_neg, seed), 'rb') as dataset_file:
-                ml_dataset = pickle.load(dataset_file)
+                # load ml-100k dataset from the downloaded file
+                with open("%s/%s-ml-%d-seed_%d" % (local_path_prefix, mode, n_neg, seed), 'rb') as dataset_file:
+                    ml_dataset = pickle.load(dataset_file)
 
             create_dataset_artifact(ml_dataset, dataset_name, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed),
-                                    "%s/%s-%s-%d-seed_%d" % (local_path_prefix, mode, dataset_name, n_neg, seed),
                                     wandb_project)
 
 
@@ -233,6 +231,7 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
                                                           local_dataset_path_prefix)
                                  for mode in evaluation_modes
                                  for seed in range(starting_seed, starting_seed + n_runs))
+    np.d()
 
     # run grid search of each model on each dataset with seed 0
     Parallel(n_jobs=num_workers)(delayed(grid_search)(model,
@@ -247,6 +246,7 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
     # train every model on every dataset with every seed with best configuration files obtained
     Parallel(n_jobs=num_workers)(delayed(train)(model,
                                                 "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed),
+                                                starting_seed,
                                                 local_dataset_path_prefix,
                                                 local_config_path_prefix,
                                                 local_model_path_prefix,
@@ -259,6 +259,7 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
     # test every model on every dataset with every seed with best model files obtained
     Parallel(n_jobs=num_workers)(delayed(model_test)(model,
                                                      "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg, seed),
+                                                     starting_seed,
                                                      local_dataset_path_prefix,
                                                      local_config_path_prefix,
                                                      local_model_path_prefix,
@@ -279,6 +280,8 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
     # todo vorrei poter fare le grid search che voglio ma anche non doverla fare
     # todo capire bene cosa succede quando lancio la grid search direttamente dal training
     # todo idea: se esiste un best config artifact, allora seleziono quello per fare il training
+    # todo capire se ha senso che do anche la possibilita' di passare un dizionaro di configurazione
+    # todo capire quell'errore di wandb che mi sovrascrive la run
     # wandb.login()
     # wandb.init(project='prova')
     #
@@ -304,20 +307,22 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
 
 
 if __name__ == '__main__':
-    run_experiment(wandb_project='prova',
+    run_experiment(wandb_project='prova2',
                    local_dataset_path_prefix="./datasets/experiment-folds",
                    local_config_path_prefix="./config/best_config",
                    local_model_path_prefix="./saved_models/models",
                    local_result_path_prefix="./results/results",
-                   evaluation_modes="ml",
-                   training_folds="ml",
-                   models="standard_mf",
-                   starting_seed=0, n_runs=1)
+                   # evaluation_modes="ml",
+                   # training_folds="ml",
+                   # models="standard_mf",
+                   starting_seed=0, n_runs=3)
     # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
     # todo applicare un metodo tipo optuna o wandb e verificare se ci sono parametri migliori
     # todo forse bisognerebbe usare il logger per fare in modo che le cose vengano loggate correttamente anche su wandb
     # todo vorrei una struttura un po' meglio per i file
     # todo non mi piacere vedere tutte le run di una grid search per ogni modello, vorrei vedere solo una grid search per modello
+    # todo forse ha senso scaricare l'artefatto solo se non e' gia' presente sulla folder. si puo' fare una funzione adibita a questo
+    # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si
     # report_dict = create_report_dict(starting_seed=0, n_runs=30, exp_name="experiment")
     # pprint.pprint(report_dict)
     # generate_report_table(report_dict, metrics=("ndcg@10",))

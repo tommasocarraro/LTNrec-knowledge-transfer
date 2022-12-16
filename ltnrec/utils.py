@@ -9,6 +9,7 @@ import random
 # from torch.optim import Adam
 import json
 import os
+import wandb
 
 
 def set_seed(seed):
@@ -28,6 +29,31 @@ def remove_seed_from_dataset_name(dataset_name):
     :return:
     """
     return "-".join(dataset_name.split("-")[:-1])
+
+
+def reset_wandb_env():
+    """
+    It resets the wandb enviromet variables.
+
+    It has to be used when multiple wandb.init() are used inside the same function. You have just to call this function
+    after you run is finished. Then, you can start the next run.
+    """
+    exclude = {
+        "WANDB_PROJECT",
+        "WANDB_ENTITY",
+        "WANDB_API_KEY",
+    }
+    for k, v in os.environ.items():
+        if k.startswith("WANDB_") and k not in exclude:
+            del os.environ[k]
+
+
+def upload_config_artifact(run_name, artifact_name, local_config_path_prefix, wandb_project):
+    with wandb.init(project=wandb_project, job_type="upload_best_model_config", name=run_name) as upload_run:
+        config_artifact = wandb.Artifact(artifact_name, type="model_config")
+        config_artifact.add_file("%s/%s.json" % (local_config_path_prefix, artifact_name))
+        upload_run.log_artifact(config_artifact)
+        upload_run.finish()
 
 
 def append_to_result_file(file_name, experiment_name, result, seed):

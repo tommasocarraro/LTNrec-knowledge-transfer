@@ -11,10 +11,10 @@
         "wd": {"values": [0.0001, 0.0005, 0.001]}
       }
     },
-  "search_n_iter": 15,
+  "search_n_iter": 5,
   "val_batch_size": 512,
   "n_epochs": 100,
-  "early_stop": 10,
+  "early_stop": 2,
   "verbose": 1,
   "val_metric": "hit@10",
   "test_metrics": ["hit@10", "ndcg@10"]
