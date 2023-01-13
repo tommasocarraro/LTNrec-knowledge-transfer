@@ -836,6 +836,10 @@ class DataManager:
         """
         # set seed for the sampling of random negative items
         set_seed(seed)
+        if mode == "mlDIFFmr":
+            mode = "ml\mr"
+        if mode == "mlANDmr":
+            mode = "ml&mr"
         assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode,)
         # we need a dataframe because it allows to apply group by operations
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
