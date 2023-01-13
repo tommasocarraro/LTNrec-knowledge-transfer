@@ -254,15 +254,19 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
     if num_workers > 1:
         os.environ["WANDB_START_METHOD"] = "thread"
 
+    mode_dict = {"ml": "ml", "ml\mr": "mlDIFFmr", "ml&mr": "mlANDmr"}
+    training_folds_dict = {"ml": "ml", "ml|mr(movies)": "mlUNIONmrMovies", "ml|mr(movies+genres)": "mlUNIONmrMoviesGenres",
+                           "ml(movies)|mr(genres)": "mlMoviesUNIONmrGenres"}
+
     # create datasets and save them
-    Parallel(n_jobs=num_workers)(delayed(create_datasets)(mode, training_folds, seed, n_neg, wandb_project,
+    Parallel(n_jobs=num_workers)(delayed(create_datasets)(mode_dict[mode], [training_folds_dict[fold for fold in training_folds], seed, n_neg, wandb_project,
                                                           local_dataset_path_prefix, proportions_to_keep)
                                  for mode in evaluation_modes
                                  for seed in range(starting_seed, starting_seed + n_runs))
     #
     # # run grid search of each model on each dataset with seed 0 and proportion 1
     Parallel(n_jobs=num_workers)(delayed(grid_search)(model,
-                                                      "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, starting_seed),
+                                                      "%s-%s-%d-%.2f-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg, p, starting_seed),
                                                       local_dataset_path_prefix,
                                                       local_config_path_prefix,
                                                       wandb_project)
@@ -270,7 +274,7 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                  for mode in evaluation_modes
                                  for dataset_name in training_folds
                                  for p in proportions_to_keep
-                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
+                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg,
                                                                                      starting_seed)))
     # # #
     # # # upload best model configs as wandb artifacts
@@ -278,7 +282,7 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
     # #
     # train every model on every dataset with every seed with best configuration files obtained
     Parallel(n_jobs=num_workers)(delayed(train)(model,
-                                                "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
+                                                "%s-%s-%d-%.2f-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg, p, seed),
                                                 starting_seed,
                                                 local_dataset_path_prefix,
                                                 local_config_path_prefix,
@@ -289,12 +293,12 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                  for dataset_name in training_folds
                                  for seed in range(starting_seed, starting_seed + n_runs)
                                  for p in proportions_to_keep
-                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
+                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg,
                                                                                      starting_seed)))
     # #
     # # # test every model on every dataset with every seed with best model files obtained
     Parallel(n_jobs=num_workers)(delayed(model_test)(model,
-                                                     "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
+                                                     "%s-%s-%d-%.2f-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg, p, seed),
                                                      starting_seed,
                                                      local_dataset_path_prefix,
                                                      local_config_path_prefix,
@@ -306,7 +310,7 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                  for dataset_name in training_folds
                                  for seed in range(starting_seed, starting_seed + n_runs)
                                  for p in proportions_to_keep
-                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
+                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode_dict[mode], training_folds_dict[dataset_name], n_neg,
                                                                                      starting_seed)))
     #
     # create_report_json(local_result_path_prefix, "bayesian_50")
