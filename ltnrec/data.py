@@ -686,9 +686,9 @@ class DataManager:
         dataset_movie_to_genres = {mr_to_new_idx[movie["idx"]]: movie["genres"].split("|")
                                    for movie in self.mr_movie_info}
         # take the genres for remaining movies
-        dataset_movie_to_genres = dataset_movie_to_genres | {ml_to_new_idx[movie[0]]: movie[2].split("|")
-                                                             for movie in self.ml_100_movie_info
-                                                             if ml_to_new_idx[movie[0]] not in dataset_movie_to_genres}
+        dataset_movie_to_genres = {**dataset_movie_to_genres, **{ml_to_new_idx[movie[0]]: movie[2].split("|")
+                                                                 for movie in self.ml_100_movie_info
+                                                                 if ml_to_new_idx[movie[0]] not in dataset_movie_to_genres}}
         # create np.array of movie-genre pairs
         dataset_movie_to_genres = np.array([[movie, int(genre)] for movie in dataset_movie_to_genres
                                             for genre in dataset_movie_to_genres[movie]
