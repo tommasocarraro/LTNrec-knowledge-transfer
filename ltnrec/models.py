@@ -8,7 +8,6 @@ import json
 from torch.optim import Adam
 from ltnrec.utils import append_to_result_file, set_seed, reset_wandb_env, remove_seed_from_dataset_name
 import wandb
-import wandb.util
 import pickle
 
 # create global wandb api object
