@@ -274,40 +274,40 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                                                                      starting_seed)))
     # # #
     # # # upload best model configs as wandb artifacts
-    upload_best_configs(local_config_path_prefix, wandb_project)
-    # #
-    # train every model on every dataset with every seed with best configuration files obtained
-    Parallel(n_jobs=num_workers)(delayed(train)(model,
-                                                "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
-                                                starting_seed,
-                                                local_dataset_path_prefix,
-                                                local_config_path_prefix,
-                                                local_model_path_prefix,
-                                                wandb_project)
-                                 for model in models_list
-                                 for mode in evaluation_modes
-                                 for dataset_name in training_folds
-                                 for seed in range(starting_seed, starting_seed + n_runs)
-                                 for p in proportions_to_keep
-                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
-                                                                                     starting_seed)))
-    # #
-    # # # test every model on every dataset with every seed with best model files obtained
-    Parallel(n_jobs=num_workers)(delayed(model_test)(model,
-                                                     "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
-                                                     starting_seed,
-                                                     local_dataset_path_prefix,
-                                                     local_config_path_prefix,
-                                                     local_model_path_prefix,
-                                                     local_result_path_prefix,
-                                                     wandb_project)
-                                 for model in models_list
-                                 for mode in evaluation_modes
-                                 for dataset_name in training_folds
-                                 for seed in range(starting_seed, starting_seed + n_runs)
-                                 for p in proportions_to_keep
-                                 if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
-                                                                                     starting_seed)))
+    # upload_best_configs(local_config_path_prefix, wandb_project)
+    # # #
+    # # train every model on every dataset with every seed with best configuration files obtained
+    # Parallel(n_jobs=num_workers)(delayed(train)(model,
+    #                                             "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
+    #                                             starting_seed,
+    #                                             local_dataset_path_prefix,
+    #                                             local_config_path_prefix,
+    #                                             local_model_path_prefix,
+    #                                             wandb_project)
+    #                              for model in models_list
+    #                              for mode in evaluation_modes
+    #                              for dataset_name in training_folds
+    #                              for seed in range(starting_seed, starting_seed + n_runs)
+    #                              for p in proportions_to_keep
+    #                              if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
+    #                                                                                  starting_seed)))
+    # # #
+    # # # # test every model on every dataset with every seed with best model files obtained
+    # Parallel(n_jobs=num_workers)(delayed(model_test)(model,
+    #                                                  "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, seed),
+    #                                                  starting_seed,
+    #                                                  local_dataset_path_prefix,
+    #                                                  local_config_path_prefix,
+    #                                                  local_model_path_prefix,
+    #                                                  local_result_path_prefix,
+    #                                                  wandb_project)
+    #                              for model in models_list
+    #                              for mode in evaluation_modes
+    #                              for dataset_name in training_folds
+    #                              for seed in range(starting_seed, starting_seed + n_runs)
+    #                              for p in proportions_to_keep
+    #                              if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
+    #                                                                                  starting_seed)))
     #
     # create_report_json(local_result_path_prefix, "bayesian_50")
     # generate_report_table(os.path.join(local_result_path_prefix, "bayesian_50.json"), models=models)
@@ -329,11 +329,11 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
 
 if __name__ == '__main__':
     run_experiment(wandb_project='prova',
-                   evaluation_modes="ml\mr",
-                   training_folds="ml",  # , "ml(movies)|mr(genres)"
-                   models="standard_mf",
+                   # evaluation_modes="ml\mr",
+                   # training_folds="ml",  # , "ml(movies)|mr(genres)"
+                   # models="standard_mf",
                    # proportions_to_keep=(0.05, ),  # 1, 0.5, 0.2, 0.1, 0.05
-                   starting_seed=0, n_runs=1)
+                   starting_seed=0, n_runs=30)
     # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
     # todo applicare un metodo tipo optuna o wandb e verificare se ci sono parametri migliori
     # todo forse bisognerebbe usare il logger per fare in modo che le cose vengano loggate correttamente anche su wandb
