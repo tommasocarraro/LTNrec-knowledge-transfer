@@ -19,6 +19,24 @@ def set_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+    torch.cuda.manual_seed(seed)
+    # Set a fixed value for the hash seed
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+def remove_prop_and_seed_from_dataset_name(dataset_name):
+    """
+    It remove the proportion of training ratings and seed from the dataset name.
+
+    :param dataset_name: name of the dataset
+    :return:
+    """
+    name = dataset_name.split("-")
+    if len(name) == 5:
+        # we remove the proportion only if there is
+        name = name[:-2] + [name[-1]]
+    name = "-".join(name)
+    return "_".join(name.split("_")[:-1]) + "_"
 
 
 def remove_seed_from_dataset_name(dataset_name):
@@ -28,7 +46,7 @@ def remove_seed_from_dataset_name(dataset_name):
     :param dataset_name: name of the dataset
     :return:
     """
-    return "-".join(dataset_name.split("-")[:-1])
+    return "_".join(dataset_name.split("_")[:-1]) + "_"
 
 
 def reset_wandb_env():
@@ -46,14 +64,6 @@ def reset_wandb_env():
     for k, v in os.environ.items():
         if k.startswith("WANDB_") and k not in exclude:
             del os.environ[k]
-
-
-def upload_config_artifact(run_name, artifact_name, local_config_path_prefix, wandb_project):
-    with wandb.init(project=wandb_project, job_type="upload_best_model_config", name=run_name) as upload_run:
-        config_artifact = wandb.Artifact(artifact_name, type="model_config")
-        config_artifact.add_file("%s/%s.json" % (local_config_path_prefix, artifact_name))
-        upload_run.log_artifact(config_artifact)
-        upload_run.finish()
 
 
 def append_to_result_file(file_name, experiment_name, result, seed):
@@ -106,6 +116,51 @@ def append_to_result_file(file_name, experiment_name, result, seed):
         json.dump(data, outfile, indent=4)
 
 
+def create_report_json(local_result_path_prefix, json_file_name="experiment"):
+    # create dictionary containing the results
+    result_dict = {}
+    # iterate over created result files
+    for result_file in os.listdir(local_result_path_prefix):
+        # check that the file is a JSON file and begins with 'result-'
+        if result_file.endswith(".json") and result_file.startswith("result-"):
+            # get file content
+            with open(os.path.join(local_result_path_prefix, result_file), "r") as json_file:
+                metrics_values = json.load(json_file)
+            # get model of the experiment
+            model = result_file.split("-")[1].split("=")[1]
+            # get evaluation mode of the experiment
+            evaluation_mode = result_file.split("-")[2].split("=")[1]
+            # get training fold of the experiment
+            training_fold = result_file.split("-")[3]
+
+            # put results at the right place in the big report dict
+            if evaluation_mode not in result_dict:
+                result_dict[evaluation_mode] = {training_fold: {model: {metric: [metrics_values[metric]]
+                                                                        for metric in metrics_values}}}
+            elif training_fold not in result_dict[evaluation_mode]:
+                result_dict[evaluation_mode][training_fold] = {model: {metric: [metrics_values[metric]]
+                                                                       for metric in metrics_values}}
+            elif model not in result_dict[evaluation_mode][training_fold]:
+                result_dict[evaluation_mode][training_fold][model] = {metric: [metrics_values[metric]]
+                                                                      for metric in metrics_values}
+            else:
+                for metric in metrics_values:
+                    result_dict[evaluation_mode][training_fold][model][metric].append(metrics_values[metric])
+
+    # loop over the big report dict to compute mean and std of the experiments with different seeds
+    for evaluation_mode in result_dict:
+        for training_fold in result_dict[evaluation_mode]:
+            for model in result_dict[evaluation_mode][training_fold]:
+                for metric in result_dict[evaluation_mode][training_fold][model]:
+                    result_dict[evaluation_mode][training_fold][model][metric] = (
+                        np.mean(result_dict[evaluation_mode][training_fold][model][metric]),
+                        np.std(result_dict[evaluation_mode][training_fold][model][metric]))
+
+    # create JSON file with the result
+    with open(os.path.join(local_result_path_prefix, json_file_name + ".json"), "w") as outfile:
+        json.dump(result_dict, outfile, indent=4)
+
+
 def create_report_dict(starting_seed=0, n_runs=30, exp_name="experiment"):
     # create dictionary containing the results
     result_dict = {}
@@ -150,6 +205,11 @@ def generate_report_table(report_dict,
                           models=("standard_mf", "ltn_mf", "ltn_mf_genres"),
                           evaluation_modes=("ml", "ml&mr", "ml\mr"),
                           training_folds=("ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)")):
+    # check if report_dict is a dict - if it is not a dict, it has to be a path to a JSON file
+    if not isinstance(report_dict, dict):
+        with open(report_dict, "r") as json_file:
+            report_dict = json.load(json_file)
+
     table = "\\begin{table*}[ht!]\n"
     table += "\caption{Table title}\label{table-label}\n"
     table += "\centering\n"
@@ -171,9 +231,10 @@ def generate_report_table(report_dict,
         for tr_fold in training_folds:
             table += " & %s" % (tr_fold.replace("|", " $\cup$ "), )
             for model in models:
-                if model in report_dict[mode][tr_fold]:
+                if tr_fold in report_dict[mode] and model in report_dict[mode][tr_fold]:
                     for metric in metrics:
-                        table += " & %.3f$_{(%.3f)}$" % report_dict[mode][tr_fold][model][metric]
+                        table += " & %.3f$_{(%.3f)}$" % (report_dict[mode][tr_fold][model][metric][0],
+                                                         report_dict[mode][tr_fold][model][metric][1])
                 else:
                     table += " & na" * len(metrics)
             table += "\\\\\n"

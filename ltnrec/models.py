@@ -6,7 +6,7 @@ from ltnrec.metrics import compute_metric, check_metrics
 from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres
 import json
 from torch.optim import Adam
-from ltnrec.utils import append_to_result_file, set_seed, reset_wandb_env, upload_config_artifact
+from ltnrec.utils import append_to_result_file, set_seed, reset_wandb_env, remove_seed_from_dataset_name
 import wandb
 import wandb.util
 import pickle
@@ -158,7 +158,7 @@ class Trainer:
             'optimizer_state_dict': self.optimizer.state_dict()
         }, path)
         if wandb_train:
-            model_artifact = wandb.Artifact("%s" % (path.split("/")[-1].split(".")[0]), type="model")
+            model_artifact = wandb.Artifact("%s" % (path.split("/")[-1].split(".pth")[0]), type="model")
             model_artifact.add_file(path)
             wandb.log_artifact(model_artifact)
 
@@ -294,7 +294,7 @@ class LTNTrainerMFGenres(LTNTrainerMF):
     higher the closeness between the predicted score and the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, p, n_movies, item_genres_matrix):
+    def __init__(self, mf_model, optimizer, alpha, p, n_movies, item_genres_matrix, exists=False):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
@@ -304,10 +304,17 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         :param n_movies: number of movies in the dataset
         :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
         belongs to the genre
+        :param exists: whether to use existential quantifier on the axiom that performs logical reasoning about the
+        genres of the movies. Existential quantifier allows to state that it is enough that the user does not like
+        one single genre of a movie to decrease the rating for that movie. With the universal quantifier, instead,
+        the decrease increases with the number of genres of the movie that the user does not like. The more the number
+        of genres that the user does not like, the greater the decrease of the rating for that movie.
         """
         super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha, p)
         item_genres_matrix = torch.tensor(item_genres_matrix.todense())
-        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
+        self.exists = exists
+        if exists:
+            self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
         # here, we need to remove n_movies because the genres are in [n_movies, n_movies + n_genres] in the MF model
@@ -319,10 +326,16 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
             self.optimizer.zero_grad()
             f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
-            f2 = self.Forall(ltn.diag(u2, i2),
-                             self.Forall(g, self.Implies(
-                                 self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
-                                 self.Sim(self.Likes(u2, i2), r_)))).value
+            if not self.exists:
+                f2 = self.Forall(ltn.diag(u2, i2),
+                                 self.Forall(g, self.Implies(
+                                     self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
+                                     self.Sim(self.Likes(u2, i2), r_)))).value
+            else:
+                f2 = self.Forall(ltn.diag(u2, i2),
+                                 self.Exists(g, self.Implies(
+                                     self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
+                                     self.Sim(self.Likes(u2, i2), r_)))).value
             train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat
             loss.backward()
@@ -380,14 +393,21 @@ class Model:
         :param wandb_project: name of the wandb project
         :return:
         """
-        try:
-            # check if a best configuration artifact for this model and dataset already exists
-            api.artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                   dataset_id))
-            print("Grid search for model=%s-dataset=%s has been already performed. Find the config"
-                  "artifact at config/config-model=%s-dataset=%s" % (self.model_name, dataset_id, self.model_name,
-                                                                     dataset_id))
-        except wandb.errors.CommError:
+        # try:
+        #     # check if a best configuration artifact for this model and dataset already exists
+        #     api.artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
+        #                                                            dataset_id))
+        #     print("Grid search for model=%s-dataset=%s has been already performed. Find the config"
+        #           "artifact at config/config-model=%s-dataset=%s" % (self.model_name, dataset_id, self.model_name,
+        #                                                              dataset_id))
+        # except wandb.errors.CommError:
+        # check if a best configuration file for this model and dataset already exists
+        if os.path.exists("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix,
+                                                                  self.model_name, dataset_id)):
+            print("Grid search for model=%s-dataset=%s has been already performed. Find the config "
+                  "file at %s/config-model=%s-dataset=%s" % (self.model_name, dataset_id,
+                                                             local_config_path_prefix, self.model_name, dataset_id))
+        else:
             # if the best configuration artifact does not exists, we have to run a grid search for this model and
             # dataset
             # create the sweep for this grid search
@@ -403,7 +423,7 @@ class Model:
                 This function defines a single grid search run with randomly sampled hyper-parameter values.
                 """
                 # create a wandb run for performing this single grid search run
-                with wandb.init(project=wandb_project, job_type="grid_search", reinit=True) as run:
+                with wandb.init(project=wandb_project, job_type="grid_search") as run:
                     # get artifact for this run
                     run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(
                         local_dataset_path_prefix)
@@ -412,14 +432,14 @@ class Model:
                         dataset = pickle.load(dataset_file)
                     # run the train of the model
                     self.grid_search_train(run, dataset_id, dataset)
-                    run.finish()
 
             # set seed for reproducible experiments
-            set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
+            # todo qua non ha senso il seed, tanto non funziona sugli sweep, e non ha senso riprodurre la grid search
+            # todo il problema e' sulla riproducibilita' degli esperimenti in parallelo, si setta un seed globale, quindi non so come funzioni
+            # set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
             # run the wandb agent that will perform the sweep
             wandb.agent(sweep_id, function=single_run, count=self.param_config["search_n_iter"])
 
-            # create an artifact for saving the best configuration of hyper-parameters
             best_config = api.sweep("%s/%s" % (wandb_project, sweep_id)).best_run().config
 
             print("Saving best hyper-parameters "
@@ -429,13 +449,22 @@ class Model:
             with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
                                                               dataset_id), "w") as outfile:
                 json.dump(best_config, outfile, indent=4)
-            # create artifact with best configuration
-            print("Creating model config artifact config-model=%s-dataset=%s on project %s" % (self.model_name,
-                                                                                               dataset_id,
-                                                                                               wandb_project))
-            upload_config_artifact("upload_best_model_config:model=%s-dataset=%s" % (self.model_name, dataset_id),
-                                   "config-model=%s-dataset=%s" % (self.model_name, dataset_id),
-                                   local_config_path_prefix, wandb_project)
+            # # create artifact with best configuration
+            # print("Creating model config artifact config-model=%s-dataset=%s on project %s" % (self.model_name,
+            #                                                                                    dataset_id,
+            #                                                                                    wandb_project))
+            # with wandb.init(project=wandb_project,
+            #                 job_type="upload_best_model_config",
+            #                 reinit=True,
+            #                 id="ciao2",
+            #                 name="upload_best_model_config:model=%s-dataset=%s" % (self.model_name,
+            #                                                                        dataset_id)) as upload_run:
+            #     print(upload_run.id)
+            #     config_artifact = wandb.Artifact("config-model=%s-dataset=%s" % (self.model_name, dataset_id),
+            #                                      type="model_config")
+            #     config_artifact.add_file("%s/%s.json" % (local_config_path_prefix,
+            #                                              "config-model=%s-dataset=%s" % (self.model_name, dataset_id)))
+            #     upload_run.log_artifact(config_artifact)
 
     def grid_search_train(self, wandb_run, dataset_id, data):
         """
@@ -478,7 +507,6 @@ class Model:
         :param wandb_project: name of the wandb project
         :return:
         """
-        # todo secondo me questo metodo non deve chiamare la grid search
         # todo gli si da il nome di un artifact di configurazione oppure un dizionario di configurazione
         # todo quindi in pratica decido io come fare training, cosi ho massima flessibilita'
         try:
@@ -494,13 +522,14 @@ class Model:
             try:
                 # check if the best configuration artifact for this model and dataset exists with the given seed
                 api.artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                       dataset_id[:-1] + str(config_seed)))
+                                                                       remove_seed_from_dataset_name(dataset_id)
+                                                                       + str(config_seed)))
             except wandb.errors.CommError:
                 # if the best configuration artifact does not exists with the given seed, we have to raise an exception
                 raise FileNotFoundError("The configuration artifact with name config-model=%s-dataset=%s does "
-                                        "not exist. Please, run a grid search to generate the requested file or"
-                                        "try with another seed." % (self.model_name,
-                                                                    dataset_id[:-1] + str(config_seed)))
+                                        "not exist. Please, run a grid search to generate the requested "
+                                        "file." % (self.model_name, remove_seed_from_dataset_name(dataset_id)
+                                                   + str(config_seed)))
             # set seed from reproducibility
             set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last character in the string
             # if the best configuration file already exists, we can train the model with the hyper-parameters specified
@@ -509,12 +538,13 @@ class Model:
                 run.name = "model_training:model=%s-dataset=%s" % (self.model_name, dataset_id)
                 # download the best configuration file artifact
                 run.use_artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                           dataset_id[:-1] + str(config_seed))).download(
-                    local_config_path_prefix
-                )
+                                                                           remove_seed_from_dataset_name(dataset_id)
+                                                                           + str(config_seed))
+                                 ).download(local_config_path_prefix)
                 # load hyper-parameters values from configuration file
                 with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
-                                                                  dataset_id[:-1] + str(config_seed))) as json_file:
+                                                                  remove_seed_from_dataset_name(dataset_id)
+                                                                  + str(config_seed))) as json_file:
                     best_config = json.load(json_file)
                 # download dataset artifact for performing the training of the model
                 run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(local_dataset_path_prefix)
@@ -524,7 +554,6 @@ class Model:
                 # train the model on the downloaded dataset with the download best configuration
                 # this method will also upload a best model artifact on Weights and Biases
                 self.train_model(dataset, dataset_id, best_config, local_model_path_prefix)
-                run.finish()
 
     def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
         """
@@ -566,6 +595,7 @@ class Model:
         try:
             # check if a result artifact for this model already exists
             api.artifact("%s/result-model=%s-dataset=%s:latest" % (wandb_project, self.model_name, dataset_id))
+            print("Result artifact result-model=%s-dataset=%s already exists." % (self.model_name, dataset_id))
         except wandb.errors.CommError:
             # if it does not exists, we have to create it
             try:
@@ -590,16 +620,18 @@ class Model:
                 )
                 # download the best configuration file artifact
                 run.use_artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                           dataset_id[:-1] + str(config_seed))).download(
+                                                                           remove_seed_from_dataset_name(dataset_id)
+                                                                           + str(config_seed))).download(
                     local_config_path_prefix
                 )
                 # load hyper-parameters values from configuration file
                 with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
-                                                                  dataset_id[:-1] + str(config_seed))) as json_file:
+                                                                  remove_seed_from_dataset_name(dataset_id)
+                                                                  + str(config_seed))) as json_file:
                     best_config = json.load(json_file)
                 # test the model - it also loads the best model file on the torch model and creates the result artifact
+                print("Testing model=%s-dataset=%s" % (self.model_name, dataset_id))
                 self.test_model(dataset, dataset_id, best_config, local_model_path_prefix, local_result_path_prefix)
-                run.finish()
 
     def test_model(self, data, dataset_id, best_config, local_model_path_prefix, local_result_path_prefix):
         """
@@ -647,7 +679,7 @@ class StandardMFModel(Model):
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
         tr_loader = TrainingDataLoader(data.train, tr_batch_size)
-        val_loader = ValDataLoader(data.val, 512)
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
         trainer = MFTrainer(model, Adam(model.parameters(), lr=lr, weight_decay=wd))
         trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                       n_epochs=self.param_config["n_epochs"],
@@ -658,7 +690,7 @@ class StandardMFModel(Model):
         # train model with best configuration
         model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
         tr_loader = TrainingDataLoader(data.train, best_config["tr_batch_size"])
-        val_loader = ValDataLoader(data.val, 512)
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
         trainer = MFTrainer(model, Adam(model.parameters(), lr=best_config["lr"], weight_decay=best_config["wd"]))
         trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                       n_epochs=self.param_config["n_epochs"],
@@ -683,6 +715,7 @@ class StandardMFModel(Model):
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
         # create result artifact
+        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
         result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
         result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
                                                                          dataset_id))
@@ -781,21 +814,59 @@ class LTNMFModel(Model):
         tr_batch_size = wandb.config.tr_batch_size
         wd = wandb.config.wd
         p = wandb.config.p
+        alpha = wandb.config.alpha
 
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
-                         "wd=%.4f,p=%d" % (self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p)
+                         "wd=%.4f,p=%d,alpha=%.3f" % (self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
         tr_loader = TrainingDataLoaderLTN(data.train, tr_batch_size)
-        val_loader = ValDataLoader(data.val, 512)
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
         trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=lr, weight_decay=wd),
-                               alpha=self.param_config["alpha"], p=p)
+                               alpha=alpha, p=p)
         trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                       n_epochs=self.param_config["n_epochs"],
                       verbose=self.param_config["verbose"],
                       wandb_train=True, model_name=wandb_run.name, early=self.param_config["early_stop"])
+
+    def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
+        # train model with best configuration
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        tr_loader = TrainingDataLoaderLTN(data.train, best_config["tr_batch_size"])
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
+        trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=best_config["lr"], weight_decay=best_config["wd"]),
+                               alpha=best_config["alpha"], p=best_config["p"])
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name="model_training:model=%s-dataset=%s" % (self.model_name, dataset_id),
+                      early=self.param_config["early_stop"],
+                      save_path="%s/model-model=%s-dataset=%s.pth" % (local_model_path_prefix, self.model_name,
+                                                                      dataset_id))
+
+    def test_model(self, data, dataset_id, best_config, local_dataset_path_prefix, local_result_path_prefix):
+        # create test loader and model
+        test_loader = ValDataLoader(data.test, self.param_config["val_batch_size"])
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=best_config["lr"], weight_decay=best_config["wd"]),
+                               alpha=best_config["alpha"], p=best_config["p"])
+        # load best weights on the model
+        trainer.load_model("%s/model-model=%s-dataset=%s.pth" % (local_dataset_path_prefix, self.model_name,
+                                                                 dataset_id))
+        # test the model
+        metrics_dict = trainer.test(test_loader, self.param_config["test_metrics"])
+        # create the result JSON file and save it on disk
+        with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
+                                                          self.model_name, dataset_id), "w") as outfile:
+            json.dump(metrics_dict, outfile, indent=4)
+        # create result artifact
+        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
+        result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
+        result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
+                                                                         dataset_id))
+        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
@@ -899,24 +970,70 @@ class LTNMFGenresModel(Model):
         wd = wandb.config.wd
         p = wandb.config.p
         n_sampled_genres = wandb.config.n_sampled_genres
+        exists = wandb.config.exists
+        alpha = wandb.config.alpha
 
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
-                         "wd=%.4f,p=%d,n_sampled_genres=%d" % (self.model_name, dataset_id, k, biased, lr,
-                                                               tr_batch_size, wd, p, n_sampled_genres)
+                         "wd=%.4f,p=%d,n_sampled_genres=%d,exists=%d,alpha=%.3f" % (self.model_name, dataset_id, k, biased, lr,
+                                                                         tr_batch_size, wd, p, n_sampled_genres, exists, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
-        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items, data.n_genres,
+        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items - data.n_genres, data.n_genres,
                                                 n_sampled_genres, tr_batch_size)
-        val_loader = ValDataLoader(data.val, 512)
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
         trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=lr, weight_decay=wd),
-                                     alpha=self.param_config["alpha"], p=p, n_movies=data.n_items - data.n_genres,
-                                     item_genres_matrix=data.item_genres_matrix)
+                                     alpha=alpha, p=p, n_movies=data.n_items - data.n_genres,
+                                     item_genres_matrix=data.item_genres_matrix, exists=exists)
         trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
                       n_epochs=self.param_config["n_epochs"],
                       verbose=self.param_config["verbose"],
                       wandb_train=True, model_name=wandb_run.name, early=self.param_config["early_stop"])
+
+    def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
+        # train model with best configuration
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items - data.n_genres, data.n_genres,
+                                                best_config["n_sampled_genres"], best_config["tr_batch_size"])
+        val_loader = ValDataLoader(data.val, self.param_config["val_batch_size"])
+        trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=best_config["lr"],
+                                                 weight_decay=best_config["wd"]),
+                                     alpha=best_config["alpha"], p=best_config["p"],
+                                     n_movies=data.n_items - data.n_genres,
+                                     item_genres_matrix=data.item_genres_matrix, exists=best_config["exists"])
+        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
+                      n_epochs=self.param_config["n_epochs"],
+                      verbose=self.param_config["verbose"],
+                      wandb_train=True, model_name="model_training:model=%s-dataset=%s" % (self.model_name, dataset_id),
+                      early=self.param_config["early_stop"],
+                      save_path="%s/model-model=%s-dataset=%s.pth" % (local_model_path_prefix, self.model_name,
+                                                                      dataset_id))
+
+    def test_model(self, data, dataset_id, best_config, local_dataset_path_prefix, local_result_path_prefix):
+        # create test loader and model
+        test_loader = ValDataLoader(data.test, self.param_config["val_batch_size"])
+        model = MatrixFactorization(data.n_users, data.n_items, best_config["k"], best_config["biased"])
+        trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=best_config["lr"],
+                                                 weight_decay=best_config["wd"]),
+                                     alpha=best_config["alpha"], p=best_config["p"],
+                                     n_movies=data.n_items - data.n_genres,
+                                     item_genres_matrix=data.item_genres_matrix, exists=best_config["exists"])
+        # load best weights on the model
+        trainer.load_model("%s/model-model=%s-dataset=%s.pth" % (local_dataset_path_prefix, self.model_name,
+                                                                 dataset_id))
+        # test the model
+        metrics_dict = trainer.test(test_loader, self.param_config["test_metrics"])
+        # create the result JSON file and save it on disk
+        with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
+                                                          self.model_name, dataset_id), "w") as outfile:
+            json.dump(metrics_dict, outfile, indent=4)
+        # create result artifact
+        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
+        result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
+        result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
+                                                                         dataset_id))
+        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):

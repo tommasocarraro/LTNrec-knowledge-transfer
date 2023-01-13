@@ -1,6 +1,6 @@
 {
   "sweep_config": {
-  "method": "random",
+  "method": "bayes",
   "metric": {"goal": "maximize", "name": "hit@10"},
   "parameters":
       {
@@ -11,10 +11,10 @@
         "wd": {"values": [0.0001, 0.0005, 0.001]}
       }
     },
-  "search_n_iter": 5,
+  "search_n_iter": 10,
   "val_batch_size": 512,
   "n_epochs": 100,
-  "early_stop": 2,
+  "early_stop": 10,
   "verbose": 1,
   "val_metric": "hit@10",
   "test_metrics": ["hit@10", "ndcg@10"]

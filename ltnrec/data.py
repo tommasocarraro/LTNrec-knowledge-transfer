@@ -5,6 +5,7 @@ from fuzzywuzzy import fuzz
 import random
 from SPARQLWrapper import SPARQLWrapper, JSON, POST
 from scipy.sparse import csr_matrix
+from ltnrec.utils import set_seed
 
 
 # todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un
@@ -833,6 +834,8 @@ class DataManager:
         If fair is True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k
         and the joint set movies.
         """
+        # set seed for the sampling of random negative items
+        set_seed(seed)
         assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode,)
         # we need a dataframe because it allows to apply group by operations
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
@@ -886,6 +889,7 @@ class DataManager:
                 assert len(not_seen_by_u) > n_neg, "Problem: parameter n_neg (%d) is higher than the available " \
                                                    "number of movies from which we can sample (%d). Set a lower " \
                                                    "number of n_neg" % (n_neg, len(not_seen_by_u))
+                # todo forse qua c'e' un bug perche' manca il random state - manca il set del seed - messo su
                 neg_movies_test_for_u = random.sample(not_seen_by_u, n_neg)
                 test.append([[u_idx, item] for item in neg_movies_test_for_u + [sampled_pos_u_ratings[0]]])
                 # if we have at least three positive ratings, it means we have have to create also the validation
@@ -961,3 +965,25 @@ class DataManager:
 
         return Dataset(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
                        train_set["i_idx"].nunique(), name="ml|mr(movies)")
+
+    @staticmethod
+    def increase_data_sparsity(dataset, p_to_keep, seed):
+        """
+        It removes ratings from the training set of the given dataset to increase its sparsity.
+
+        :param dataset: the Dataset object from which we need to remove training ratings
+        :param p_to_keep: the proportion of ratings that has to be kept for each user of the training set. The other
+        ratings will be discarded
+        :param seed: seed for reproducibility of the experiments
+        :return the dataset with a proportion of training ratings per user equal to `p_to_keep`
+        """
+        assert 0 < p_to_keep <= 1, "The proportion of ratings to be kept for each user is out of the possible range."
+        if p_to_keep != 1:
+            train_df = pd.DataFrame(dataset.train, columns=["uid", "iid", "rate"])
+            groups = train_df.groupby(by=["uid"])
+            for u_idx, u_ratings in groups:
+                ratings_to_remove = u_ratings.sample(frac=(1 - p_to_keep), random_state=seed)
+                train_df.drop(ratings_to_remove.index, inplace=True)
+
+            dataset.train = train_df.to_numpy()
+        return dataset

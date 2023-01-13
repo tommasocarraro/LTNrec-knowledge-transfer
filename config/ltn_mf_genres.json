@@ -1,19 +1,21 @@
 {
   "sweep_config": {
-  "method": "random",
+  "method": "bayes",
   "metric": {"goal": "maximize", "name": "hit@10"},
   "parameters":
       {
         "tr_batch_size": {"values": [64, 128, 256, 512]},
-        "k": {"values": [1, 5, 10, 20, 30]},
-        "lr": {"values": [0.0005, 0.0001, 0.001, 0.005, 0.05, 0.01]},
+        "k": {"values": [1, 5, 10, 20]},
+        "lr": {"values": [0.0005, 0.0001, 0.001, 0.005]},
         "biased": {"values": [0, 1]},
         "wd": {"values": [0.0001, 0.0005, 0.001]},
         "p": {"values":  [2, 5, 10]},
-        "n_sampled_genres": {"values": [2, 5, 10]}
+        "n_sampled_genres": {"values": [2, 5, 10]},
+        "alpha": {"values": [0.01, 0.05, 0.1]},
+        "exists": {"values": [0, 1]}
       }
     },
-  "search_n_iter": 15,
+  "search_n_iter": 20,
   "val_batch_size": 512,
   "alpha": 0.05,
   "val_metric": "hit@10",
