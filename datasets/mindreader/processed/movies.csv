@@ -1,0 +1,3035 @@
+idx,title,genres
+0,Titanic (1997),7|13
+1,Silent Hill (2006),8|10
+2,Stargate (1994),0|1|14
+3,Deadpool (2016),0|14|4
+4,Shaun of the Dead (2004),10|4
+5,Doctor Strange (2016),8|0|1|14
+6,28 Days Later (2002),10
+7,Inception (2010),1|14|7|15|12
+8,The Italian Job (1969),5|4
+9,Austin Powers in Goldmember (2002),None
+10,Why Him? (2016),4
+11,Ted 2 (2015),8|4
+12,The Jungle Book (2016),8|0|1|7
+13,Ratatouille (2007),None
+14,The Avengers (2012),0|1|14
+15,Cars (2006),4
+16,The Maze Runner (2014),8|0|15|12
+17,The Hunger Games (2012),8|0|1|14|7
+18,Transformers: Age of Extinction (2014),0|14
+19,Transformers (2007),0|14
+20,G.I. Joe: The Rise of Cobra (2009),0|14
+21,Transformers: Revenge of the Fallen (2009),0|14
+22,Seed of Chucky (2004),4
+23,Scott Pilgrim vs. the World (2010),8|0|4
+24,The 40-Year-Old Virgin (2005),None
+25,Harry Potter and the Sorcerer's Stone (2001),8|1|3
+26,Harry Potter and the Prisoner of Azkaban (2004),8|3
+27,The Ring Two (2005),10
+28,Father of the Bride Part II (1995),4
+29,Harry Potter and the Half-Blood Prince (2009),8
+30,Seven Pounds (2008),8|7|13
+31,I Now Pronounce You Chuck and Larry (2007),None
+32,A Nightmare on Elm Street 4: The Dream Master (1988),10
+33,Harry Potter and the Order of the Phoenix (2007),8|3
+34,The Machinist (2004),7
+35,Memento (2000),7|15|10|5|12
+36,Juno (2007),7|4|13
+37,Non-Stop (2014),0|12
+38,The Interview (2014),0
+39,Flight (2012),7
+40,American Pie Presents: Band Camp (2005),4
+41,Shutter Island (2010),7|15|10|5|12
+42,The Terminal (2004),7
+43,Pulp Fiction (1994),7|15
+44,Iron Man 3 (2013),0|1|14
+45,Gran Torino (2008),7|5
+46,The Hangover (2009),4
+47,Pirates of the Caribbean: The Curse of the Black Pearl (2003),8|0|1|4
+48,Carrie (1976),7|15|10
+49,The Simpsons Movie (2007),4
+50,Ice Age 2: The Meltdown (2006),8|3
+51,We're the Millers (2013),5|4
+52,Irreversible (2002),7|5
+53,Fahrenheit 9/11 (2004),6
+54,12 Years a Slave (2013),7
+55,Knocked Up (2007),7
+56,Surrogates (2009),0|14|12
+57,Pineapple Express (2008),0|5|4
+58,Inglourious Basterds (2009),7|16
+59,Forgetting Sarah Marshall (2008),None
+60,Iron Man 2 (2010),0|1|14
+61,American Pie Presents: The Book of Love (2009),None
+62,Bowling for Columbine (2002),6
+63,Dumb and Dumberer: When Harry Met Lloyd (2003),None
+64,The King's Speech (2010),7
+65,Terminator 3: Rise of the Machines (2003),0|14
+66,"The Chronicles of Narnia: The Lion, the Witch and the Wardrobe (2005)",8|0
+67,The Lego Movie (2014),8|0|4|3
+68,Terminator Genisys (2015),0|14
+69,Christmas Vacation (1989),4
+70,Homeward Bound II: Lost in San Francisco (1996),1|3
+71,Oliver & Company (1988),11|3
+72,The Cat in the Hat (2003),8|3
+73,Star Wars: Episode VI - Return of the Jedi (1983),8|0|1|14
+74,Wallace & Gromit: A Close Shave (1995),8|4|3
+75,Rebel Without a Cause (1955),7
+76,Raw Deal (1986),0|15|5
+77,Star Wars: Episode III - Revenge of the Sith (2005),8|0|1|14
+78,Strangers on a Train (1951),7|15|12|9
+79,Kindergarten Cop (1990),0|4
+80,The Nightmare Before Christmas (1993),8|11
+81,Monsters vs. Aliens (2009),0|14
+82,The Incredible Hulk (2008),0|1|14
+83,Star Wars: Episode V - The Empire Strikes Back (1980),8|0|1
+84,Alien (1979),14|10
+85,A Streetcar Named Desire (1951),7
+86,Solo: A Star Wars Story (2018),8|0|14
+87,Rashomon (1950),7|5
+88,Despicable Me (2010),4
+89,The Chronicles of Narnia: The Voyage of the Dawn Treader (2010),8|0
+90,An American in Paris (1951),11
+91,The Bridge on the River Kwai (1957),7|16
+92,Garfield: The Movie (2004),4
+93,That Darn Cat! (1965),4|3
+94,Cats & Dogs (2001),8|0|1|14|4|3
+95,X-Men: First Class (2011),8|0|14
+96,Apocalypse Now (1979),0|7|16
+97,Beethoven (1992),4
+98,Horrible Bosses (2011),4
+99,Nacho Libre (2006),4
+100,The Martian (2015),0|1|14|7
+101,The Karate Kid (1984),0|7|13
+102,Mission: Impossible (1996),0|15
+103,Iron Man (2008),0|1|14
+104,The Man with Two Brains (1983),14|10|4
+105,Guardians of the Galaxy (2014),0|1|14|4
+106,I Am Legend (2007),0|7
+107,Quantum of Solace (2008),0|1
+108,Gone Girl (2014),7|5|12
+109,District 9 (2009),0|14|7|15
+110,Secondhand Lions (2003),7|4
+111,Life of Pi (2012),8|1|7
+112,Twilight Zone: The Movie (1983),8|14|7|10
+113,The Grand Budapest Hotel (2014),1|7|5|4|13
+114,The Bourne Ultimatum (2007),0|12
+115,The Incredibles (2004),None
+116,"Good Morning, Vietnam (1987)",16|4
+117,Safety Not Guaranteed (2012),14|4
+118,National Lampoon's Van Wilder (2002),None
+119,Django Unchained (2012),7|17
+120,The World's End (2013),0|14
+121,22 Jump Street (2014),0|4
+122,Talladega Nights: The Ballad of Ricky Bobby (2006),0|4
+123,Knowing (2009),0|14|12
+124,Star Trek IV: The Voyage Home (1986),1|14
+125,Baywatch (2017),0|4
+126,"Definitely, Maybe (2008)",None
+127,Maze Runner: Scorch Trials (2015),8|0|7|12
+128,Hugo (2011),8|1|7|12
+129,Superman (1978),0|14
+130,Fantastic Four: Rise of the Silver Surfer (2007),8|0|14
+131,Fools Rush In (1997),None
+132,Now You See Me 2 (2016),0|1|15|5|4|12
+133,Get the Gringo (2012),0|7|5
+134,A Clockwork Orange (1971),14|7|15|5|12
+135,The Hobbit: The Desolation of Smaug (2013),8|0|1
+136,Four Weddings and a Funeral (1994),7
+137,Kill Bill: Vol. 2 (2004),0|15
+138,Slumdog Millionaire (2008),7|5|13
+139,Daredevil (2003),0|7|15
+140,An Inconvenient Truth (2006),6
+141,The Wolf of Wall Street (2013),7|5|4
+142,Miracle on 34th Street (1947),8|7|4
+143,Back to the Future (1985),1|14|4
+144,Ali (2001),7
+145,Starship Troopers (1997),0|14|15
+146,High School Musical (2006),7|11|3
+147,Interstellar (2014),1|14|7
+148,Coraline (2009),8|10
+149,Up (2009),8|1|4
+150,The Iron Giant (1999),8|0|14|7|3
+151,Monty Python and the Holy Grail (1975),8|1|4
+152,Liar Liar (1997),4
+153,Forrest Gump (1994),7|4
+154,Sausage Party (2016),1|4
+155,The Shape of Water (2017),8|7|15|13
+156,The Shining (1980),7|10|12
+157,The Matrix (1999),0|14|15
+158,The Dark Knight Rises (2012),0|7|15
+159,E.T. the Extra-Terrestrial (1982),14|7|3
+160,The Lord of the Rings: The Return of the King (2003),8|0|7
+161,The Great Dictator (1940),7|16
+162,Dark City (1998),14|15|10
+163,Ender's Game (2013),8|0|1|14|3
+164,The Hunger Games: Mockingjay - Part 2 (2015),0|14|7|16
+165,Constantine (2005),8|7|10
+166,"Batman: The Dark Knight Returns, Part 1 (2012)",0|14
+167,Event Horizon (1997),1|14|10
+168,Metropolis (2001),14|7
+169,The Matrix Reloaded (2003),0|14|15
+170,V for Vendetta (2005),15
+171,Captain America: The First Avenger (2011),0|14|16
+172,The Hunchback of Notre Dame (1996),8|7|11
+173,Star Trek (2009),0|1|14
+174,Batman v Superman: Dawn of Justice (2016),0|14
+175,The Lord of the Rings: The Two Towers (2002),8|0|7
+176,Treasure Planet (2002),None
+177,Hulk (2003),0|14|7
+178,28 Weeks Later (2007),0|7|10
+179,Charlie and the Chocolate Factory (2005),8|11|3
+180,Minority Report (2002),0|14
+181,Thor (2011),8|0|1|14
+182,Wonder Woman (2017),8|0|1|7|16
+183,The Ring (2002),15|10|12
+184,Rogue One: A Star Wars Story (2016),8|0|14|16
+185,War of the Worlds (2005),0|14|7|15|10
+186,Avengers: Age of Ultron (2015),0|1|14
+187,WALL·E (2008),1|14|4|3|13
+188,Edward Scissorhands (1990),8|14|7|10|4|13
+189,The Lord of the Rings (1978),8
+190,The Matrix Revolutions (2003),0|14
+191,The Hunger Games: Catching Fire (2012),0|1|14|7
+192,World War Z (2013),7|15
+193,Star Trek: Generations (1994),0|1|14
+194,John Wick: Chapter Two (2017),0|15|5
+195,The Mummy (1999),8|0|10
+196,Toy Story (1995),8
+197,Guardians of the Galaxy 2 (2017),0|1|14|4
+198,Catwoman (2004),8|0|15
+199,Borat: Cultural Learnings of America for Make Benefit Glorious Nation of Kazakhstan (2006),None
+200,The Day of the Doctor (2013),None
+201,King Kong (2005),0|1|7|13
+202,The Fifth Element (1997),8|0|1|14|4
+203,Ocean's Eleven (2001),0|1|4|12
+204,"10,000 BC (2008)",8|0|1|14|7
+205,Aliens (1986),0|1|14|15
+206,Bright (2017),8|0|5
+207,End of Days (1999),8|0|15|10
+208,1408 (2007),7|15|10
+209,The Passion of the Christ (2004),7
+210,Ant-Man and the Wasp (2018),0|1|14|4
+211,Star Wars: The Last Jedi (2017),8|0|1|14
+212,Pinocchio (1940),8|11
+213,Shrek (2001),8|0
+214,Ice Age (2002),8|3
+215,Captain America: Civil War (2016),None
+216,Superbad (2007),4
+217,Schindler's List (1993),7|16
+218,Police Academy (1984),5|4
+219,Ant-Man (2015),0|1|14|4
+220,Grown Ups (2010),4
+221,X-Men Origins: Wolverine (2009),0|14
+222,Hotel Transylvania (2012),None
+223,Arrival (2016),14|7|15|12
+224,Inspector Gadget (1999),0|4
+225,Blade Runner (1982),0|14|7|15|9
+226,Spider-Man (2002),14|7
+227,Shooter (2007),0|12
+228,The Sum of All Fears (2002),0|7|15
+229,Excalibur (1981),8|0|7
+230,Grandma's Boy (2006),4
+231,Snow White and the Huntsman (2012),8|0|7
+232,Let Me In (2010),8|7|10|12|13
+233,Submarine (2010),7
+234,The Texas Chainsaw Massacre (1974),10
+235,The Flintstones (1994),8|4
+236,Steel Magnolias (1989),7
+237,Home Alone (1990),1|4|3
+238,Les Misérables (2012),7|11|13
+239,Baby Driver (2017),0|1
+240,The Girl with the Dragon Tattoo (2011),7|15|10|12
+241,Zombieland (2009),10
+242,Warm Bodies (2013),None
+243,Adventureland (2009),7
+244,Never Been Kissed (1999),None
+245,Pitch Perfect (2012),11
+246,The Black Dahlia (2006),7|5|12|9
+247,The Imitation Game (2014),7|16
+248,The Great Gatsby (2013),7|13
+249,The Prestige (2006),8|7|15|12
+250,Jason Bourne (2016),0|15|12
+251,The Accountant (2016),0|7|15|5|12
+252,Source Code (2011),0|14|7|15|12
+253,A Quiet Place (2018),14|15|10
+254,Get Out (2017),0|15|10|12
+255,Inside Out (2015),8|1|7|4
+256,Chasing Liberty (2004),None
+257,Now You See Me (2013),5
+258,Kingsman: The Secret Service (2014),0|5|4
+259,The Descendants (2011),7
+260,The Holiday (2006),4
+261,Up in the Air (2009),7
+262,Dead Poets Society (1989),7
+263,The Departed (2006),7
+264,The Social Network (2010),7
+265,The Nice Guys (2016),4|12
+266,The Twilight Saga: New Moon (2009),8|0|7|10|13
+267,Mad Max: Fury Road (2015),0|1|14|15
+268,Harry Potter and the Deathly Hallows: Part 2 (2011),8
+269,27 Dresses (2008),None
+270,A.I. Artificial Intelligence (2001),14|7
+271,The Shawshank Redemption (1994),7|5
+272,Pirates of the Caribbean: At World's End (2007),8|0|1|4
+273,The Rum Diary (2011),7|4
+274,Lethal Weapon 4 (1998),0|15
+275,2 Fast 2 Furious (2003),0|5
+276,Cocoon (1985),8|14|7|4
+277,Paul Blart: Mall Cop (2009),4
+278,Pan's Labyrinth (2006),8|7
+279,Crossroads (2002),7
+280,Rosencrantz and Guildenstern Are Dead (1990),7|4
+281,Four Lions (2010),None
+282,Changeling (2008),7|5|12
+283,The Jungle Book (1994),8|1|7
+284,Milk (2008),7
+285,This Is the End (2013),8|4
+286,Hacksaw Ridge (2016),7|16|13
+287,The English Patient (1996),7|16|13
+288,Seeking a Friend for the End of the World (2012),14|7
+289,Fandango (1985),None
+290,Fatal Attraction (1987),7|15|12
+291,A League of Their Own (1992),4
+292,Indiana Jones and the Temple of Doom (1984),0|1
+293,Groundhog Day (1993),8|14|4|13
+294,The Way of the Gun (2000),0|7
+295,Robin Hood: Men in Tights (1993),0|4
+296,Bad Boys (1995),0|15|4
+297,Cloverfield (2008),0|14|10
+298,City of God (2002),7|5
+299,Immortals (2011),8|0|1|7
+300,Transformers: Dark of the Moon (2011),0|14|15
+301,The Wedding Ringer (2015),None
+302,Noah (2014),8|1|7
+303,Goodfellas (1990),7|5
+304,World Trade Center (2006),7
+305,The Internship (2013),7|4
+306,Monty Python's And Now for Something Completely Different (1971),4
+307,Focus (2015),7|5
+308,Paul (2011),14
+309,Alice (1990),8
+310,Thank You for Smoking (2005),7|4
+311,Suicide Squad (2016),8|0|1|14
+312,Aladdin (1992),4|11
+313,Be Cool (2005),5|4
+314,Anger Management (2003),4
+315,Herbie Goes Bananas (1980),4|3
+316,Eternal Sunshine of the Spotless Mind (2004),14|7
+317,What a Girl Wants (2003),None
+318,Peter Pan (2003),8|3
+319,My Boss's Daughter (2003),None
+320,Killing Them Softly (2012),0|7
+321,Johnny Mnemonic (1995),0|14
+322,Jade (1995),0|7|5
+323,The Little Mermaid (1989),8|11|3|13
+324,Beerfest (2006),4
+325,Tangled (2010),8|4|11
+326,Enemy of the State (1998),0|15
+327,Kung Fu Panda 2 (2011),4
+328,Chain Reaction (1996),0|14|7|15
+329,Munich (2005),7
+330,About Last Night... (1986),None
+331,Killer Klowns from Outer Space (1988),14|10|4
+332,Vacation (2015),1|4
+333,Frozen (2013),8|4|11
+334,Salt (2010),0|15|12
+335,Plan 9 from Outer Space (1959),14|10
+336,The Secret World of Arrietty (2010),8|3
+337,Untitled Spider-Man Reboot (2017),0|14|4
+338,Unbroken (2014),7|16
+339,Avatar (2009),0|1|14
+340,Wreck-It Ralph (2012),8|1|14|4
+341,Coco (2017),8|1|7|11
+342,Live Free or Die Hard (2007),0
+343,Herbie Goes to Monte Carlo (1977),0|4|3
+344,Thor: Ragnarok (2017),8|0|1|14|4
+345,Dirty Work (1998),4
+346,King Kong (1976),8|0|14|7|10
+347,Alien³ (1992),1|14|10
+348,John Carter (2012),8|0|1|14
+349,Elysium (2013),0|14|7|15
+350,Harold and Kumar Go to White Castle (2004),4
+351,Fantastic Four (2015),8|0|1|14
+352,Toy Story 2 (1999),8
+353,Straight Outta Compton (2015),7|5|11
+354,Terminator 2: Judgment Day (1991),0|14|7|15
+355,Edge of Tomorrow (2014),14
+356,Star Wars: Episode II - Attack of the Clones (2002),8|0|1|14
+357,Zootopia (2016),1|12
+358,Night at the Museum: Secret of the Tomb (2014),8|0|1|4
+359,Léon: The Professional (1994),0|7|12
+360,R.I.P.D. (2013),8|0|14|4
+361,The Chronicles of Narnia: Prince Caspian (2008),8|0
+362,The Terminator (1984),0|14|7
+363,Captain America: The Winter Soldier (2014),0|1|14
+364,Casino Royale (2006),0
+365,Ex Machina (2014),14|7
+366,The Mask (1994),8|4
+367,Yes Man (2008),None
+368,Star Wars: Episode IV - A New Hope (1977),8|0|1|14
+369,Hitch (2005),None
+370,Enchanted (2007),8|4|11
+371,Over the Hedge (2006),1|4|3
+372,The Host (2013),8|0|1|14|7|15|13
+373,The Switch (2010),None
+374,Mamma Mia! (2008),11
+375,Days of Summer (2009),4
+376,Batman Begins (2005),0|7|5
+377,102 Dalmatians (2000),8|4|3
+378,Star Wars: Episode VII - The Force Awakens (2015),8|0|1|14
+379,Judge Dredd (1995),0|14
+380,Black Swan (2010),7|15|10
+381,Old Boy (2003),7|15|12
+382,Princess Mononoke (1996),8|0|7
+383,Thunderball (1965),0|15
+384,Walk the Line (2005),7|11
+385,The Quiet Man (1952),7
+386,Mystery Science Theater 3000: The Movie (1996),1|14
+387,The Amazing Spider-Man 2 (2014),0|14|15
+388,Zoolander (2001),4
+389,The Boys from Brazil (1978),14|15|5
+390,Total Recall (1990),0|1|14
+391,Saving Mr. Banks (2013),7
+392,Labyrinth (1986),8|1|11|3
+393,Chappie (2015),14|7|15|4
+394,The Lion King (1994),7|11|3
+395,The Borrowers (1997),8|4|3
+396,American Pie (1999),None
+397,Divergent (2014),0|1|13
+398,How to Train Your Dragon (2010),8|1|3
+399,Spartacus (1960),0|7|16|13
+400,Stuart Little 2 (2002),4|3
+401,The Lord of the Rings: The Fellowship of the Ring (2001),8|0|1|7
+402,Monsters University (2013),8|4|3
+403,The Amazing Spider-Man (2012),0|14|15
+404,Pocahontas (1995),8|11|13
+405,The Adventures of Tintin (2011),8|0|1|12
+406,The Transporter (2002),0
+407,School of Rock (2003),4|11
+408,Something's Gotta Give (2003),7|4
+409,The Princess Diaries (2001),3
+410,Fast Five (2011),0|5
+411,Akira (1988),14
+412,Band of Brothers,16
+413,Bitter Moon (1992),7|15|13
+414,It (2017),7|15|10
+415,Cradle 2 the Grave (2003),0|15
+416,Ernest Saves Christmas (1988),4|3
+417,The Longest Yard (2005),7|5
+418,"Honey, I Shrunk the Kids (1989)",14|4
+419,Holes (2003),4|12|17
+420,The Help (2011),7
+421,Finding Dory (2016),1|4
+422,Rent (2005),7|11
+423,Superhero Movie (2008),None
+424,The Goonies (1985),0|1|4|3
+425,National Security (2003),0|5|4
+426,Star Wars: Episode I - The Phantom Menace (1999),8|0|1|14
+427,Grease (1978),11
+428,Baby Mama (2008),4
+429,Troy (2004),0|7|16
+430,Justice League (2017),8|0|1
+431,Rise of the Guardians (2012),8|1
+432,Running Scared (1986),0|5|4
+433,Muppet Treasure Island (1996),4|11|3
+434,X-Men: Apocalypse (2016),8|14
+435,It's Kind of a Funny Story (2010),4
+436,Willy Wonka & the Chocolate Factory (1971),8|7|11|3
+437,The Hangover Part III (2013),4
+438,Stand by Me (1986),1|7|4
+439,Kung Fu Panda: Secrets of the Furious Five (2009),None
+440,Big (reg. Penny Marshall) (1988),8|7
+441,The Lincoln Lawyer (2011),7|5
+442,The Good Dinosaur (2015),8|1|4
+443,La La Land (2016),7|4|11|13
+444,Lake Placid (1999),14|4
+445,The Big Lebowski (1998),5|4
+446,Mean Girls (2004),None
+447,"The Good, the Bad and the Ugly (1966)",16
+448,Harry Potter and the Deathly Hallows: Part 1 (2010),8
+449,The Silence of the Lambs (1991),7|15|10|5
+450,The Bourne Supremacy (2004),0
+451,Dancer in the Dark (2000),7|11
+452,John Wick (2014),0|15
+453,Das Boot (1981),7|16
+454,Casablanca (1942),7|16|13
+455,Spider-Man 2 (2004),0|14|7|15
+456,Mission: Impossible - Rogue Nation (2015),0|15
+457,Kingsman: The Golden Circle (2017),0|5|4
+458,Silver Linings Playbook (2012),7|4
+459,Lost in Translation (2003),7
+460,Fight Club (1999),0|7|15
+461,One Flew Over the Cuckoo's Nest (1975),7|4
+462,Fantastic Beasts and Where to Find Them (2016),8|1|7|3
+463,Jack and Jill (2011),4
+464,Maleficent (2014),8|0|7
+465,Anchorman: The Legend of Ron Burgundy (2004),4
+466,Jurassic World (2015),0|1|14
+467,American Psycho (2000),7|15|5
+468,Sleepy Hollow (1999),8|12
+469,The Big Short (2015),7|5
+470,"Three Billboards Outside Ebbing, Missouri (2017)",7|5|12
+471,Defiance (2008),7|16
+472,Dodgeball: A True Underdog Story (2004),4
+473,Batman Forever (1995),8|0
+474,Independence Day (1996),0|14|15
+475,Fantastic Mr. Fox (2009),4
+476,Holiday Inn (1942),11
+477,Unbreakable (2000),8|14|7|10|12
+478,Vanilla Sky (2001),14|7|13
+479,Man on Fire (2004),0|7|5
+480,Ghost in the Shell (1995),8|0|14
+481,Army of Darkness (1992),8|1|10|4
+482,The Perfect Storm (2000),0|7
+483,Scream (1996),10|4|12
+484,Good Will Hunting (1997),7|13
+485,Corpse Bride (2005),8|11
+486,The Expendables (2010),0|15
+487,The Sixth Sense (1999),7|15|10
+488,Kung Fury (2015),0|4
+489,The Dark Knight (2008),0|7|5
+490,The Muppet Christmas Carol (1992),7|4|11|3
+491,Scream 4 (2011),15|4|12
+492,Jason X (2001),1|14|10
+493,Hellboy II: The Golden Army (2008),8|0|10
+494,Signs (2002),14|15|10
+495,Furious 7 (2015),0|7|15|4
+496,Looper (2012),0|14|7
+497,Fast & Furious 6 (2013),0|15
+498,Some Like It Hot (1959),5|11
+499,Shallow Hal (2001),7
+500,Shrek the Third (2007),8|0
+501,The Hobbit: An Unexpected Journey (2012),8|0|1
+502,13 Going on 30 (2004),8
+503,The Boss Baby (2017),4
+504,Let the Right One In (2008),7|10
+505,Zookeeper (2011),3
+506,Oblivion (2013),0|14|15
+507,Stranger than Fiction (2006),8|7|4|13
+508,Shopgirl (2005),7|4|13
+509,The Nanny Diaries (2007),7|13
+510,Jobs (2013),7
+511,Raiders of the Lost Ark (1981),0
+512,Robin Hood: Prince of Thieves (1991),0|1|7|13
+513,Masterminds (2015),None
+514,Watchmen (2009),0|7
+515,Almost Famous (2000),7|4|11
+516,Sin City (2005),0|7|5
+517,Twin Peaks: Fire Walk with Me (1992),7|10|5|12
+518,Taxi Driver (1976),7
+519,Say Anything... (1989),7
+520,Matilda (1996),8|7|4|3
+521,Mrs. Doubtfire (1993),7
+522,Spice World (1997),4|11|3
+523,"South Park: Bigger, Longer and Uncut (1999)",11
+524,The Day After Tomorrow (2004),0
+525,Hellboy (2004),8|10
+526,The Net (1995),15|12
+527,Beetlejuice (1988),8
+528,Wedding Crashers (2005),None
+529,Black Panther (2018),0|1|14
+530,Total Recall (2012),0|14|15
+531,Skyfall (2012),0
+532,Lucky Number Slevin (2006),0|7
+533,Toy Story 3 (2010),4
+534,Jarhead (2005),0|7|16
+535,Red Eye (2005),7|15|12
+536,No Country for Old Men (2007),7|15|5
+537,Hard Candy (2005),7|15|5
+538,The Illusionist (2010),7|4
+539,Drive (2011),7|15|5
+540,The Mist (2007),14|7|10
+541,Fargo (1996),7|15|5
+542,Don't Breathe (2016),15|10|5
+543,Serenity (2005),0|1|14|7|4|17
+544,Star Trek III: The Search for Spock (1984),0|1|14
+545,Big Hero 6 (2014),8|0|14
+546,The Rocky Horror Picture Show (1975),14|10|11
+547,Blood Diamond (2006),0|7|16
+548,Sherlock Holmes (2009),0|1|12
+549,Rise of the Planet of the Apes (2011),0|14|7
+550,The Girl with the Dragon Tattoo (2009),7|15|10
+551,Click (2006),8|14|4
+552,There Will Be Blood (2007),7
+553,Avengers: Infinity War - Part I (2018),0|1|14
+554,Seven (1995),7|15|5|12
+555,Ferris Bueller's Day Off (1986),4
+556,The Adventures of Rocky and Bullwinkle (2000),8|3
+557,The Theory of Everything (2014),7|13
+558,Oliver! (1968),7|5|11
+559,Spectre (2015),0|1|15
+560,The World Is Not Enough (1999),0
+561,Hostel: Part II (2007),15|10
+562,Ocean's Thirteen (2007),0|4
+563,EuroTrip (2004),4
+564,Black Hawk Down (2001),0|7|16
+565,Captain Phillips (2013),0|7
+566,Sister Act (1992),4|11
+567,"Monsters, Inc. (2001)",8|3
+568,Blade (1998),8|0|14|15|10
+569,Robots (2005),1|14|4
+570,The Princess and the Frog (2009),8|11
+571,Around the World in 80 Days (2004),0|1|4|3
+572,Ice Age: Dawn of the Dinosaurs (2009),8|3
+573,Haywire (2011),0|5|12
+574,The Siege (1998),0|15|5
+575,The Recruit (2003),7|15
+576,Screamers (1995),8|0|1|14|15|16|10
+577,Galaxy Quest (1999),1|14|4
+578,Alice in Wonderland (2010),8
+579,Oz the Great and Powerful (2013),8
+580,Elf (2003),8|4
+581,Catch Me If You Can (2002),7|5|4
+582,Wallace & Gromit: The Wrong Trousers (1993),4
+583,The Magnificent Seven (1960),0|7|17
+584,Watership Down (1978),8|1|7|3
+585,The Devil Wears Prada (2006),7
+586,Halloween (1978),7|10
+587,Charlie's Angels (2000),0|4
+588,Scream 2 (1997),12
+589,Eyes Wide Shut (1999),7|15|12
+590,Tenacious D in The Pick of Destiny (2006),4|11
+591,Kung Fu Panda (2008),None
+592,Chicken Run (2000),8|3
+593,Sherlock Holmes: A Game of Shadows (2011),0|1|12
+594,The Lion in Winter (1968),7
+595,True Grit (2010),1|7|17
+596,Surf's Up (2007),4
+597,Interview with the Vampire: The Vampire Chronicles (1994),8|7|10|13
+598,The Hitchhiker's Guide to the Galaxy (2005),1|14|4
+599,Dial M for Murder (1954),5|12
+600,Chronicle (2012),8|7|15
+601,Night at the Museum (2006),8
+602,The Wedding Singer (1998),None
+603,The Sandlot (1993),4
+604,Idiocracy (2006),14|4
+605,Men in Black II (2002),0|14|4
+606,Vampire Hunter D: Bloodlust (2000),8|10
+607,The Revenant (2015),7|15|17
+608,"Crazy, Stupid, Love. (2011)",None
+609,Do the Right Thing (1989),7|4
+610,Deadpool 2 (2018),4
+611,Moneyball (2011),7
+612,Moana (2016),0|1|4|11
+613,Heathers (1989),4|12
+614,Die Hard: With a Vengeance (1995),0
+615,Pitch Perfect 2 (2015),4|11
+616,Buffy the Vampire Slayer (1992),8|10|4
+617,Argo (2012),7
+618,Terminator Salvation (2009),0|14
+619,Happy Feet (2006),11
+620,Alice Through the Looking Glass (2016),8
+621,The Giver (2014),0|14|7
+622,Mr. Popper's Penguins (2011),4
+623,Mad Hot Ballroom (2005),6
+624,Halloween H20: 20 Years Later (1998),15|10
+625,Junior (1994),14|4
+626,Blades of Glory (2007),4
+627,The Punisher (1989),0|15|5
+628,Gulliver's Travels (2010),8|14|4|3
+629,Mortal Kombat (1995),8|0|1
+630,Next (2007),0|14|15
+631,Resident Evil: Afterlife (2010),0|14|15|10
+632,Pearl Harbor (2001),7|16|13
+633,Men in Black III (2012),0|14|4
+634,Underworld: Awakening (2012),8|0|15|10
+635,American Sniper (2014),0|7|16
+636,Must Love Dogs (2005),None
+637,Spider-Man 3 (2007),0|14|7|15
+638,Babes in Toyland (1961),8|11|3
+639,Lara Croft: Tomb Raider (2001),8|0|1|14
+640,Harold & Kumar Escape from Guantanamo Bay (2008),4
+641,The Next Best Thing (2000),7|4
+642,3 Ninjas (1992),0|4
+643,Bedtime Stories (2008),8|4|3
+644,Super Mario Bros. (1993),8|0|14
+645,Prince of Persia: The Sands of Time (2010),8|0
+646,The Punisher (2004),0|7|15|5
+647,Star Trek V: The Final Frontier (1989),0|1|14
+648,Bedknobs and Broomsticks (1971),8|1|7|16|4|11|3
+649,Insurgent (2015),0|1|14|13
+650,The Rugrats Movie (1998),11|3
+651,Dirty Dancing: Havana Nights (2004),7|11|13
+652,The Twilight Saga: Breaking Dawn - Part 2 (2012),8|7|13
+653,Cheaper by the Dozen 2 (2005),4
+654,Underworld: Evolution (2006),8|0|15|10
+655,The Number 23 (2007),7|15|12
+656,Everest (1998),6
+657,Stuart Little (1999),4|3
+658,Bad Santa (2003),5|4
+659,The 39 Steps (1935),5|12
+660,This Means War (2012),0
+661,Tinker Tailor Soldier Spy (2011),7|15|12
+662,Apollo 13 (1995),1|7
+663,The Cabin in the Woods (2012),14
+664,Kill Bill: Vol. 1 (2003),0
+665,Harry Potter and the Goblet of Fire (2005),8|1|3
+666,Hot Tub Time Machine 2 (2015),14|4
+667,The Golden Compass (2007),8|0|14
+668,Dances with Wolves (1990),1|7|16|17
+669,Daddy's Home (2015),4
+670,The Other Guys (2010),0|4
+671,The Watch (2012),0|14|4
+672,Vicky Cristina Barcelona (2008),7
+673,Alice in Wonderland (1951),8|1|11|3
+674,Cop Out (2010),4
+675,Semi-Pro (2008),4
+676,The Killing (1956),7|9
+677,JFK (1991),7|5|12
+678,Foxfire (1996),7
+679,Into the Woods (2014),8|11
+680,Death Note (2017),15|10
+681,Angels & Demons (2009),14|7|12
+682,How to Train Your Dragon 2 (2014),8|0|1|4|3
+683,The Parent Trap (1961),7|11|3
+684,Batman (1989),0
+685,Citizenfour (2014),6
+686,Limitless (2011),0|14|7|15
+687,Snowden (2016),0|7|15
+688,The Wicker Man (2006),10|5|12
+689,Hide and Seek (2005),7|15|10|12
+690,Spriggan,14
+691,X-Men: Days of Future Past (2014),0|14|15
+692,The Avengers (1998),0|14
+693,Full Metal Jacket (1987),7|16
+694,Porco Rosso (1992),8|1
+695,Happy Gilmore (1996),4
+696,Rocky (1976),0|7
+697,National Treasure: Book of Secrets (2007),0|1|15
+698,Mission: Impossible III (2006),0|1|15
+699,The River Wild (1994),0|1|7|15|5
+700,Action Jackson (1988),0|4
+701,Mary Poppins (1964),8|4|11
+702,Pirates of the Caribbean: Dead Man's Chest (2006),8|0|1|4
+703,Finding Nemo (2003),None
+704,The Fox and the Hound (1981),7|11|3
+705,The Blind Side (2009),7
+706,Spirited Away (2001),8|7|3
+707,9 (2009),8|0|1|14|12
+708,101 Dalmatians (1961),8|1|7|5|4|11
+709,The Rescuers (1977),8|11
+710,Sleeping Beauty (1959),8|11
+711,The Godfather: Part II (1974),7|5
+712,The Black Cauldron (1985),8|1|11
+713,The Fault in Our Stars (2014),7|4|13
+714,Kiki's Delivery Service (1989),8|3
+715,Planet Earth II (2016),None
+716,March of the Penguins (2005),6
+717,Lemony Snicket's A Series of Unfortunate Events (2004),8|1|7|4|3
+718,The Return of Jafar (1994),8
+719,All Dogs Go to Heaven 2 (1996),11
+720,The Great Mouse Detective (1986),1|4|12|11
+721,Hoodwinked! (2005),8|11|3
+722,Shrek Forever After (2010),8|0|4|3
+723,Jingle All the Way (1996),0|4
+724,Twilight (2008),8|0|7|13
+725,Shrek 2 (2004),8|0
+726,Alvin and the Chipmunks (2007),8|4|11
+727,Hotel Transylvania 2 (2015),8
+728,Everest (2015),0|1|15
+729,The Talented Mr. Ripley (1999),7|5
+730,The Wolverine (2013),8|0|14
+731,Notting Hill (1999),None
+732,The Lone Ranger (2013),0|4|17
+733,"I, Robot (2004)",0|14
+734,Prometheus (2012),0|1|14|10|12
+735,21 Jump Street (2012),0|5|4
+736,Children of Men (2006),14|7|15
+737,American Hustle (2013),7|5|4
+738,Big Daddy (1999),4
+739,The Sound of Music (1965),7|11|13
+740,The Artist (2011),7|4|13
+741,Her (2013),14|7|4
+742,Mr. & Mrs. Smith (2005),0
+743,Split (2016),15|10
+744,Star Trek Into Darkness (2013),1|14
+745,The Road (2009),7
+746,The A-Team (2010),0|1
+747,Tron: Legacy (2010),8|0|14
+748,The Blues Brothers (1980),4|11
+749,Moon (2009),14|7
+750,Godzilla (2014),0|14
+751,The Mask of Zorro (1998),0|1
+752,Futurama: The Beast with a Billion Backs (2008),14|4
+753,Planet Terror (2007),0|14
+754,Blast from the Past (1999),None
+755,Fantastic Four (2005),8|0|14
+756,Wanted (2008),8|0
+757,After the Sunset (2004),0|5
+758,Get Hard (2015),4
+759,The Rocketeer (1991),0|14|4
+760,There's Something About Mary (1998),None
+761,From Here to Eternity (1953),7|16|13
+762,The Day the Earth Stood Still (2008),0|14
+763,The Rage: Carrie 2 (1999),14|10
+764,Timecop (1994),0|1|14|15
+765,A Good Day to Die Hard (2013),0
+766,X-Men (2000),8|0|14
+767,Ransom (1996),0|7|5|12
+768,Ghostbusters (1984),8|0|1|14|4
+769,Dirty Grandpa (2016),4
+770,Let's Be Cops (2014),0|4
+771,Ted (2012),8|4
+772,Déjà Vu (2006),0|14|15
+773,Star Trek: Nemesis (2002),0|1|14
+774,The Legend of Tarzan (2016),0|1
+775,Death Becomes Her (1992),8|10|4
+776,She's All That (1999),None
+777,Premium Rush (2012),0|15
+778,Chocolat (2000),7|13
+779,How to Lose Friends & Alienate People (2008),4
+780,Yogi Bear (2010),1|4|3
+781,Logan (2017),0|14|7
+782,The House of the Dead (2003),0|14|15|10
+783,Jurassic Park (1993),0|1|14
+784,Pirates of the Caribbean: On Stranger Tides (2011),8|0|1|4
+785,Bad Teacher (2011),None
+786,Gifted (2016),7
+787,Ghost Rider (2007),8|0|10
+788,Snakes on a Plane (2006),0|15|4
+789,Despicable Me 2 (2013),1|14|4
+790,Conquest of the Planet of the Apes (1972),0|14
+791,AVPR: Aliens vs. Predator - Requiem (2007),0|14|15
+792,Hot Fuzz (2007),0|5|4
+793,Memories (1995),8|0|1|14
+794,Of Mice and Men (1939),7
+795,Star Trek: First Contact (1996),0|1|14
+796,The Wizard of Oz (1939),8|1|7|11
+797,Wild Things (1998),7|5|12
+798,The Wrestler (2008),7
+799,Star Trek Beyond (2016),0|1|14|15
+800,Hotel Rwanda (2004),7
+801,Brave (2012),8
+802,To Kill a Mockingbird (1962),7|5
+803,Insidious (2010),7|15|10|12
+804,Son of Rambow (2007),7|4
+805,Finding Neverland (2004),8|7
+806,P.S. I Love You (2007),7
+807,The Book of Eli (2010),0|15
+808,North (1994),8|7|4
+809,War Horse (2011),7|16
+810,Alvin and the Chipmunks: The Squeakquel (2009),8|4|11|3
+811,San Andreas (2015),0
+812,Rambo (2008),0|7|16
+813,Rushmore (1998),7|4
+814,The Hurt Locker (2008),0|7|16
+815,Fast & Furious (2009),0
+816,Sense and Sensibility (1995),7|4|13
+817,Public Enemies (2009),0|7
+818,The Curious Case of Benjamin Button (2008),8|7|13
+819,Brüno (2009),4
+820,Everything You Always Wanted to Know About Sex * But Were Afraid to Ask (1972),None
+821,The Santa Clause (1994),8|4
+822,"Yours, Mine and Ours (2005)",4
+823,Sin City: A Dame to Kill For (2014),0|7|15|5
+824,Little Miss Sunshine (2006),7|4
+825,Kick-Ass (2010),0|4
+826,Laputa: Castle in the Sky (1986),8|1|3
+827,Howl's Moving Castle (2004),8|1|14|7
+828,Isle of Dogs (2018),4
+829,Halloween II (2009),10
+830,Poltergeist (1982),10
+831,Exorcist II: The Heretic (1977),15|10
+832,Saw (2003),10|5
+833,Dr. Horrible's Sing-Along Blog (2008),11
+834,Exit Through the Gift Shop (2010),4|6
+835,Brick (2005),7|5|12|9
+836,Oliver Twist (1948),7
+837,X-Men: The Last Stand (2006),8|0|14
+838,Ponyo (2008),8|1|3
+839,Madagascar 3: Europe's Most Wanted (2012),4|3
+840,Scooby-Doo (2002),8|1|12
+841,Penguins of Madagascar (2014),0|4
+842,The Royal Tenenbaums (2001),4
+843,Monty Python's Life of Brian (1979),4
+844,Reservoir Dogs (1992),7|9
+845,Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb (1964),16|4
+846,Blade Runner 2049 (2017),0|14|7|15|12
+847,Futurama: Bender's Big Score (2007),14|4
+848,Monty Python Live at the Hollywood Bowl (1982),4|6
+849,What's Eating Gilbert Grape (1993),7|4
+850,Madagascar: Escape 2 Africa (2008),3
+851,Trainspotting (1996),7|5
+852,Love Actually (2003),None
+853,Megamind (2010),14|4
+854,Space Jam (1996),8|4|3
+855,Brokeback Mountain (2005),7|13
+856,Snowpiercer (2013),0|14|7|15
+857,How the Grinch Stole Christmas (2000),8|1|4|11|3
+858,Lucy (2014),0|14
+859,Bridesmaids (2011),None
+860,The Hunger Games: Mockingjay - Part 1 (2014),0|14|7|16
+861,The Secret Life of Pets (2016),1|4
+862,Gangs of New York (2002),7|5
+863,Babe: Pig in the City (1998),8|4
+864,The Hobbit: The Battle of the Five Armies (2014),8|0|1
+865,Eye in the Sky (2015),7|15|16
+866,The Messenger: The Story of Joan of Arc (1999),7|16
+867,Any Given Sunday (1999),7
+868,The Raid 2: Berandal (2014),0|5
+869,Les Misérables (1998),7|5|13
+870,The Bourne Identity (2002),0
+871,Popeye (1980),11
+872,Speed (1994),0|1|5
+873,The Heat (2013),0|4
+874,Captain Fantastic (2016),7|4|13
+875,Stardust (2007),8|7|3
+876,Naked Gun 33 1/3: The Final Insult (1994),None
+877,Indiana Jones and the Kingdom of the Crystal Skull (2008),8|0|1|14
+878,D2: The Mighty Ducks (1994),4
+879,Ocean's Twelve (2004),0|4|12
+880,My Best Friend's Wedding (1997),None
+881,Ice Princess (2005),7
+882,The Muppets (2011),4|11
+883,Bruce Almighty (2003),8|7|4
+884,"I, Tonya (2017)",7
+885,The Man from U.N.C.L.E. (2015),0|4
+886,Kung Fu Panda 3 (2016),0|1|4|3
+887,Dogtown and Z-Boyz (2001),6
+888,The Italian Job (2003),0|12
+889,Jumanji: Welcome to the Jungle (2017),8|0|1|4
+890,Rush (2013),0|7
+891,Clash of the Titans (1981),8|0|1|3
+892,"Batman: The Dark Knight Returns, Part 2 (2013)",0
+893,Cloudy with a Chance of Meatballs (2009),8|4|3
+894,Clueless (1995),None
+895,Bridge to Terabithia (2007),8|1|7|3
+896,Abraham Lincoln: Vampire Hunter (2012),8|0|7|15|10
+897,The Hangover Part II (2011),None
+898,The Hateful Eight (2015),7|17
+899,The Sorcerer's Apprentice (2010),8|0|1|7|4
+900,Bring It On (2000),4
+901,Harry Potter and the Chamber of Secrets (2002),8|1|3
+902,Easy A (2010),None
+903,Amelie (2001),7|4
+904,Star Trek VI: The Undiscovered Country (1991),0|1|14
+905,Jonestown: The Life and Death of Peoples Temple (2006),6
+906,Morning Glory (2010),7|4
+907,Moll Flanders (1996),7|13
+908,Where the Wild Things Are (2009),8|1|7|3
+909,The Big Chill (1983),7|4|11
+910,Nausicaä of the Valley of the Wind (1984),8|1|14
+911,Moonrise Kingdom (2012),7
+912,The Omen (1976),15|10|12
+913,The Color Purple (1985),7
+914,The Grudge (2004),0|10
+915,About Time (2013),14|7|4|13
+916,The Reader (2008),7|13
+917,Departures (2008),7|11
+918,My Father the Hero (1991),7|4|13
+919,50 First Dates (2004),None
+920,Mulan (1998),8|1|11
+921,The Other Boleyn Girl (2008),7|13
+922,Clerks II (2006),4
+923,Scrooged (1988),8
+924,Gladiator (2000),0
+925,Volcano (1997),0|7|15
+926,The Fast and the Furious: Tokyo Drift (2006),0
+927,EDtv (1999),4
+928,RoboCop (2014),0|14|15
+929,Mallrats (1995),None
+930,Louis C.K.: Live at the Beacon Theater (2011),None
+931,The Green Hornet (2011),8|0|14|5|4
+932,The Rock (1996),0|15
+933,The Blind Swordsman: Zatoichi (2003),0|7
+934,Equilibrium (2002),0|14
+935,"See No Evil, Hear No Evil (1989)",5|4
+936,Billy Madison (1995),None
+937,Licence to Kill (1989),0
+938,Punch-Drunk Love (2002),7
+939,Cheaper by the Dozen (2003),4|3
+940,Predator (1987),0|14|10
+941,Air Force One (1997),0|15
+942,The Expendables 2 (2012),0|15
+943,Millions (2004),14|7|5|3
+944,Battleship (2012),0|14|16
+945,Lawless (2012),0|7|5
+946,Vertigo (1958),7|15|5|12
+947,Spy Game (2001),0
+948,Wallace & Gromit in The Curse of the Were-Rabbit (2005),8|4|12|3
+949,Teenage Mutant Ninja Turtles (2014),0|14|4
+950,The Karate Kid (2010),7|3
+951,City Hall (1996),7|5
+952,"Dude, Where's My Car? (2000)",4
+953,Miss Peregrine's Home for Peculiar Children (2016),8|1
+954,Man of Steel (2013),0|14|15
+955,European Vacation (1985),4
+956,Meet the Fockers (2004),4
+957,Ghost Rider: Spirit of Vengeance (2012),8|0|10
+958,Pacific Rim (2013),0|1
+959,Spy (2015),None
+960,Crimson Tide (1995),0|7|15|16
+961,Night of the Living Dead (1968),14|10
+962,Unforgiven (1992),7|5|17
+963,Your Highness (2011),8|4
+964,The Mosquito Coast (1986),7
+965,Erik the Viking (1989),8|1|4
+966,Thelma & Louise (1991),1|5
+967,The Big Sick (2017),None
+968,How to Lose a Guy in 10 Days (2003),None
+969,300 (2007),8|0|16
+970,Monster House (2006),8|10|4|3
+971,Kingdom of Heaven (2005),0|7|16
+972,Black Rain (1989),0|7|15
+973,Richard III (1995),7
+974,Made in America (1993),4
+975,Into the Wild (2007),7
+976,Murder on the Orient Express (1974),7|5|12
+977,Crank (2006),0|5
+978,Contagion (2011),0|14|7|15
+979,Henry V (1989),0|7|16
+980,Point Break (1991),0|15|5
+981,Shanghai Knights (2003),0
+982,Die Hard 2 (1990),0|15|5
+983,Saw II (2005),5
+984,Armageddon (1998),0|1|14|7
+985,Evolution (2001),14|4
+986,The Breakfast Club (1985),7
+987,The Usual Suspects (1995),0|7|15|12
+988,Robin Hood (1973),8|4|11
+989,Get Him to the Greek (2010),4
+990,The Truman Show (1998),14|7|4
+991,Die Hard (1988),0
+992,Atonement (2007),7|16|13
+993,Nutty Professor II: The Klumps (2000),14
+994,A Nightmare on Elm Street 5: The Dream Child (1989),10
+995,Amityville II: The Possession (1982),10
+996,American Pie 2 (2001),None
+997,Bad Moms (2016),4
+998,Friday the 13th (1980),12
+999,Friday the 13th Part VI: Jason Lives (1986),10
+1000,Whiplash (2014),7|11
+1001,Madagascar (2005),3
+1002,RoboCop 3 (1993),0|14
+1003,50/50 (2011),7|4
+1004,GoldenEye (1995),0
+1005,Psycho (1960),15|10|12
+1006,We Need to Talk About Kevin (2011),7|15|13
+1007,The Butterfly Effect (2004),8|14|7
+1008,Sweeney Todd: The Demon Barber of Fleet Street (2007),7|15|5|11
+1009,The Greatest Showman (2017),7|11|13
+1010,Moonraker (1979),0|1
+1011,The Muppet Movie (1979),4|11
+1012,My Best Friend's Girl (2008),None
+1013,Ride Along (2014),0|4
+1014,Runaway Bride (1999),7
+1015,Men in Black (1997),0|14|4
+1016,Sinbad: Legend of the Seven Seas (2003),8|4|3
+1017,The Bourne Legacy (2012),0|1|15
+1018,Shark Tale (2004),5|4|3
+1019,The Phantom of the Opera (2004),7|10|11|13
+1020,"Honey, I Blew Up the Kid (1992)",14|4
+1021,It's a Wonderful Life (1946),8|7|4
+1022,The Game Plan (2007),4|3
+1023,Meet the Parents (2000),None
+1024,The Spiderwick Chronicles (2008),8|7|3
+1025,8 Mile (2002),7|11
+1026,Drive Me Crazy (1999),7
+1027,Little Giants (1994),4
+1028,Stakeout (1987),0|4
+1029,Dawn of the Dead (2004),0|14
+1030,Colors (1988),0|7|5
+1031,Resident Evil: Extinction (2007),0|14|10
+1032,Gilda (1946),7|15|13|9
+1033,Chariots of Fire (1981),7
+1034,A History of Violence (2005),0|7
+1035,Zodiac (2007),7|12
+1036,Wing Commander (1999),0|1|14
+1037,A Million Ways to Die in the West (2014),4|17
+1038,The Imaginarium of Doctor Parnassus (2009),8|1|12
+1039,Cabin Fever (2002),None
+1040,Helvetica (2007),6
+1041,William Shakespeare's Romeo + Juliet (1996),0|7|13
+1042,Bee Movie (2007),4
+1043,The Crying Game (1992),7|5|13
+1044,Sky High (2005),8|14|4|3
+1045,A Cinderella Story (2004),3
+1046,Becoming Jane (2007),7|13
+1047,Enemy at the Gates (2001),0|7|16|13
+1048,The Mummy Returns (2001),8|0|10
+1049,Cry-Baby (1990),11
+1050,A Scanner Darkly (2006),14|7
+1051,Pirates of the Caribbean: Dead Men Tell No Tales (2017),8
+1052,Sex and the City (2008),4
+1053,Cujo (1983),7|15|10
+1054,Just Married (2003),None
+1055,Super 8 (2011),0|14|15|10|12
+1056,Sideways (2004),7
+1057,Flightplan (2005),7|15|12
+1058,"Lock, Stock & Two Smoking Barrels (1998)",None
+1059,Freaky Friday (1976),8|4|3
+1060,The Dictator (2012),4
+1061,Alfie (1966),7
+1062,Mission: Impossible - Ghost Protocol (2011),0|15
+1063,Wristcutters: A Love Story (2007),8|7
+1064,Annie Hall (1977),7|4
+1065,The Life Aquatic with Steve Zissou (2004),7|4
+1066,Eragon (2006),8|0|1
+1067,Dave (1993),7
+1068,From Russia with Love (1963),0
+1069,The Last Airbender (2010),8|0|3
+1070,Neighbors (2014),4
+1071,The Lost World: Jurassic Park (1997),0|1|14
+1072,Identity Thief (2013),5|4
+1073,Kick-Ass 2 (2013),0|4
+1074,"Girl, Interrupted (1999)",7
+1075,Taking Lives (2004),7|5
+1076,The Bone Collector (1999),7|15|10
+1077,Being John Malkovich (1999),8|7|4
+1078,Ace Ventura: Pet Detective (1994),0|4
+1079,17 Again (2009),8
+1080,Saw IV (2007),None
+1081,The Purge (2013),14|15|10
+1082,In Bruges (2008),0|7|5|4
+1083,12 Angry Men (1957),7
+1084,Young Frankenstein (1974),14|10
+1085,Gremlins (1984),10|4
+1086,Election (1999),None
+1087,Westworld (1973),0|14|15|10
+1088,Big Fish (2003),8|7|4
+1089,Breakfast on Pluto (2005),7|4
+1090,WarGames (1983),7|15
+1091,Harold and Maude (1971),7
+1092,Dirty Rotten Scoundrels (1988),5|4
+1093,Primal Fear (1996),7|5
+1094,Atlantis: The Lost Empire (2001),8|0|1|14|7
+1095,Twelve Monkeys (1995),None
+1096,Kiss Kiss Bang Bang (2005),0|4|12
+1097,The Jungle Book (1967),8|11
+1098,The Philadelphia Story (1940),None
+1099,"Planes, Trains & Automobiles (1987)",4
+1100,2001: A Space Odyssey (1968),1|15|12
+1101,National Treasure (2004),0|1|15
+1102,Escape to Witch Mountain (1975),8|14|12|3
+1103,Poltergeist III (1988),10
+1104,Dirty Dancing (1987),7|11|13
+1105,New Year's Eve (2011),None
+1106,Spy Kids 2: The Island of Lost Dreams (2002),0|1|14|4
+1107,Valentine's Day (2010),None
+1108,Pollyanna (1960),7|4|3|13
+1109,My Big Fat Greek Wedding (2002),None
+1110,The Lego Batman Movie (2017),8|4
+1111,Getting Even with Dad (1994),4
+1112,Flushed Away (2006),4|3
+1113,Four Christmases (2008),None
+1114,The Twilight Saga: Breaking Dawn - Part 1 (2011),8|7|13
+1115,Tyler Perry's Diary of a Mad Black Woman (2005),13
+1116,House II: The Second Story (1987),10
+1117,Home Alone 3 (1997),0|4
+1118,Drag Me to Hell (2009),None
+1119,Rain Man (1988),7
+1120,Hollow Man (2000),0|14|15|10
+1121,The Searchers (1956),7|16|17
+1122,Ed (1996),8|4|3
+1123,The Amityville Horror (1979),10
+1124,Police Academy 4: Citizens on Patrol (1987),5|4
+1125,The Little Rascals (1994),4|3
+1126,Planet of the Apes (2001),0|14
+1127,Rush Hour (1998),0
+1128,Red (2010),0|4
+1129,The Squid and the Whale (2005),7|4
+1130,Saw V (2008),None
+1131,Confidence (2003),None
+1132,Jackie Brown (1997),7|5
+1133,2012 (2009),0|14
+1134,The Poseidon Adventure (1972),0|7|15
+1135,Incredibles 2 (2018),0|1|4
+1136,The Three Musketeers (1993),0|1|4
+1137,Rush Hour 2 (2001),0
+1138,Bulletproof Monk (2003),8|0
+1139,Family Guy Presents Stewie Griffin: The Untold Story (2005),14
+1140,3:10 to Yuma (2007),7|5|17
+1141,127 Hours (2010),7
+1142,Willow (1988),8
+1143,The Emperor's New Groove (2000),11
+1144,X2: X-Men United (2003),8|0|14
+1145,Sex Tape (2014),4
+1146,Back to the Future Part III (1990),14|4|17
+1147,Pet Sematary (1989),10
+1148,Cowboys & Aliens (2011),0|14|15|17
+1149,The Notebook (2004),7|13
+1150,Bridget Jones's Diary (2001),4
+1151,Unfaithful (2002),7
+1152,The Lives of Others (2006),7|15
+1153,Intouchables (2011),7|4
+1154,The First Wives Club (1996),None
+1155,Jane Eyre (1996),7|13
+1156,Analyze This (1999),5|4|12
+1157,Ghostbusters (2016),8|14
+1158,Cool Hand Luke (1967),7
+1159,Night of the Creeps (1986),14|4
+1160,Arachnophobia (1990),14|10|4
+1161,Scary Movie 4 (2006),10
+1162,AVP: Alien vs. Predator (2004),0|14|10
+1163,Radio (2003),7|4
+1164,10 Things I Hate About You (1999),None
+1165,Murder on the Orient Express (2017),7|5|12
+1166,Moulin Rouge (2001),7|11
+1167,Peter Pan (1953),8|1|11
+1168,Invincible (2006),7
+1169,"I Love You, Man (2009)",None
+1170,Percy Jackson & the Olympians: The Lightning Thief (2010),8|0|1
+1171,Little Fockers (2010),4
+1172,Julie & Julia (2009),7
+1173,Midnight in Paris (2011),8|14
+1174,Wild (2014),1|7
+1175,Psycho (1998),15|10|12
+1176,Street Fighter (1994),0|14
+1177,Fifty Shades of Grey (2015),7|13
+1178,The Manchurian Candidate (1962),7|15|16|9
+1179,Casper (1995),8|4|3
+1180,Charlotte's Web (2006),4|3
+1181,Step Brothers (2008),4
+1182,The Tin Drum (1979),7|16
+1183,Little Shop of Horrors (1986),14|10|4|11
+1184,Natural Born Killers (1994),7|5|12
+1185,Everything Is Illuminated (2005),7
+1186,Deep Impact (1998),14|7
+1187,Boyhood (2014),7
+1188,Birdman: Or (2014),7|4
+1189,The Proposition (2005),7|5|17
+1190,Man on Wire (2008),6
+1191,The Fall (2006),8|7
+1192,Panic Room (2002),7|10
+1193,Bambi (1942),8|7|11|3
+1194,Brazil (1985),8|14|4
+1195,Rat Race (2001),None
+1196,Heima (2007),11|6
+1197,Final Destination (2000),15|10
+1198,Anchorman 2: The Legend Continues (2013),4
+1199,Sharknado (2013),14|10
+1200,Choke (2008),7|4
+1201,The Final Destination (2009),10
+1202,Spy Kids (2001),0|4
+1203,Jurassic Park III (2001),0|1|14|10
+1204,Spaceballs (1987),1|14|4
+1205,Escape from L.A. (1996),0|14
+1206,Red Dragon (2002),7|15|5
+1207,Payback (1999),0|7|15
+1208,A Prophet (2009),7|15
+1209,Macbeth (1971),7
+1210,Escape Plan (2013),0|15
+1211,The Princess Diaries 2: Royal Engagement (2004),4
+1212,Lady and the Tramp (1955),8|11
+1213,Dune,None
+1214,Talk to Her (2002),7|4|13
+1215,8 1/2 (1963),7
+1216,The Prince of Egypt (1998),7|11|13
+1217,The Princess Bride (1987),8
+1218,"Paris, I Love You (2006)",7|4|13
+1219,Minions (2015),4|3
+1220,Legally Blonde (2001),4
+1221,The Twilight Saga: Eclipse (2010),8|7|13
+1222,Gone in 60 Seconds (2000),0|15
+1223,Private Parts (1997),4
+1224,Horrible Bosses 2 (2014),4
+1225,What Happens in Vegas... (2008),None
+1226,Rock of Ages (2012),7|11
+1227,American Gangster (2007),7
+1228,Dumbo (1941),8|11
+1229,Love Affair (1994),7|13
+1230,Scenes From a Marriage (1973),7
+1231,Incendies (2010),7|12
+1232,The Queen (2006),7
+1233,Pumpkinhead (1988),8|10
+1234,Johnny English (2003),0
+1235,The Town (2010),7
+1236,Machete (2010),0|1|15|12
+1237,Hostage (2005),0|7|15|12|13
+1238,Body of Lies (2008),0|7|15
+1239,His Girl Friday (1940),7
+1240,The Island (2005),0|14
+1241,The Family Man (2000),8|7
+1242,Smokin' Aces (2006),0|5
+1243,Hackers (1995),7|15|5
+1244,The Secret Life of Walter Mitty (2013),8|7|4
+1245,The Way of the Dragon (1972),0
+1246,The Spy Who Loved Me (1977),0|1|15
+1247,Madonna: Truth or Dare (1991),6
+1248,An Ideal Husband (1999),4
+1249,The Women (1939),7|4
+1250,Herbie: Fully Loaded (2005),8|4
+1251,Psycho II (1983),15|10|12
+1252,The Parent Trap (1998),None
+1253,Audition (1999),7|10
+1254,The Host (2006),14|10|4
+1255,The Conjuring (2013),15|10
+1256,The NeverEnding Story II: The Next Chapter (1990),8|3
+1257,Who Framed Roger Rabbit? (1988),8|0
+1258,Dracula Untold (2014),8|0|1|7|10
+1259,The Ugly Truth (2009),None
+1260,Wimbledon (2004),None
+1261,The Smurfs 2 (2013),8|4|3
+1262,The Proposal (2009),4
+1263,Battlestar Galactica,None
+1264,Navy Seals (1990),0|15|16
+1265,Still Alice (2014),7
+1266,Family Guy Presents: It's a Trap (2011),None
+1267,Shadow of the Vampire (2000),7|10
+1268,Outside Providence (1999),7|13
+1269,Adaptation (2002),7|4
+1270,Rocky II (1979),0|7
+1271,Anaconda (1997),0|1|15|10
+1272,The Mummy: Tomb of the Dragon Emperor (2008),8|0|10
+1273,It Could Happen to You (1994),None
+1274,Ronin (1998),0|7|15
+1275,Smokey and the Bandit III (1983),4
+1276,"Crouching Tiger, Hidden Dragon (2000)",8|0|1|7|13
+1277,Dracula (1993),7|10|13
+1278,Red Cliff (2008),0
+1279,Burn After Reading (2008),7|5|4
+1280,30 Days of Night (2007),10
+1281,Dallas Buyers Club (2013),7
+1282,Inside Man (2006),0|7|5
+1283,Central Intelligence (2016),0|4
+1284,Whiskey Tango Foxtrot (2016),None
+1285,Manhattan (1979),None
+1286,Breakfast at Tiffany's (1961),4
+1287,Splash (1984),8
+1288,Spellbound (1945),7|12|13|9
+1289,Airplane! (1980),4
+1290,The Buddy Holly Story (1978),7|11
+1291,Sleepers (1996),7|5
+1292,The Grifters (1990),7|5|9
+1293,Nightcrawler (2014),7|15
+1294,Family Plot (1976),15|4|12
+1295,A Separation (2011),7
+1296,Midnight Run (1988),0|5|4
+1297,Marie Antoinette (2006),7
+1298,A Few Good Men (1992),7|15|5
+1299,Laura (1944),7|5|12|9
+1300,In the Line of Fire (1993),0|7|15|5
+1301,Look Who's Talking (1989),None
+1302,Lara Croft Tomb Raider: The Cradle of Life (2003),8|0
+1303,Cast Away (2000),1|7
+1304,Police Academy 2: Their First Assignment (1985),5|4
+1305,Maverick (1994),4|17
+1306,The Da Vinci Code (2006),7|12
+1307,Mars Attacks! (1996),14|10
+1308,Arsenic and Old Lace (1944),4|9
+1309,Titanic (1953),0|7|13
+1310,Pitch Black (2000),0|1|14|15|10
+1311,King Arthur (2004),0|7|16
+1312,Clash of the Titans (2010),8|0|7
+1313,Pixels (2015),8|14
+1314,Bride of Chucky (1998),10
+1315,Bedazzled (2000),8|4
+1316,Changing Lanes (2002),7
+1317,Babylon A.D. (2008),0|14
+1318,Mr. Deeds (2002),None
+1319,Taken 2 (2012),0
+1320,Cruel Intentions (1999),7|13
+1321,Lord of War (2005),0|7|5
+1322,Dumb & Dumber (1994),4
+1323,Night Watch (2004),8|0|15
+1324,Blended (2014),4|13
+1325,Max Payne (2008),0|7|15|5
+1326,Iron Monkey (1993),0
+1327,Blade: Trinity (2004),8|0|14|15|10
+1328,Final Fantasy VII: Advent Children (2005),8|0|14
+1329,Star Trek II: The Wrath of Khan (1982),0|1|14|15
+1330,Rocky III (1982),0|7
+1331,Old School (2003),4
+1332,A Knight's Tale (2001),0|1|4|13
+1333,Chinatown (1974),7|12|9
+1334,Napoleon Dynamite (2004),4
+1335,Team America: World Police (2004),0|16|11
+1336,Hidden Figures (2016),7
+1337,Tropic Thunder (2008),0|4
+1338,Turner & Hooch (1989),0|4
+1339,The Stupids (1996),1
+1340,Tomorrowland (2015),8|0|1|14|12
+1341,Cars 2 (2011),0
+1342,Muppets Most Wanted (2014),8|14|4|12|11
+1343,Lethal Weapon (1987),0|15|5
+1344,A Goofy Movie (1995),8|1|4|11|3
+1345,White House Down (2013),0|7|15
+1346,Bill & Ted's Bogus Journey (1991),8|14
+1347,The Adventures of Milo and Otis (1986),1|7|3
+1348,Spy Kids 3-D: Game Over (2003),8|0|1|4
+1349,The Indian in the Cupboard (1995),8|1|3
+1350,Senna (2010),6
+1351,Midnight in the Garden of Good and Evil (1997),7|5
+1352,Lethal Weapon 2 (1989),0|15
+1353,A Grand Day Out with Wallace and Gromit (1989),8|4|3
+1354,Wallace and Gromit in 'A Matter of Loaf and Death' (2008),4
+1355,Beauty and the Beast (1991),8|7|11|13
+1356,Thor: The Dark World (2013),8|0|1|14
+1357,A Christmas Story (1983),4
+1358,The Godfather (1972),7|5
+1359,Blazing Saddles (1974),4|17
+1360,Wayne's World (1992),4|11
+1361,Indiana Jones and the Last Crusade (1989),1
+1362,The Puppet Masters (1994),14|10
+1363,A Beautiful Mind (2001),7
+1364,The Godfather: Part III (1990),7|5
+1365,Critters (1986),0|1|14|10|4
+1366,Rio (2011),8|11|3
+1367,Warrior (2011),0|7
+1368,Dead Men Don't Wear Plaid (1982),5|12|9
+1369,Chicken Little (2005),8|14|4|11|3
+1370,Prelude to a Kiss (1992),8
+1371,Persona (1966),7
+1372,Horton Hears a Who! (2008),3
+1373,Scary Movie (2000),10
+1374,Run All Night (2015),0|5
+1375,House of 1000 Corpses (2003),10
+1376,Kiss the Girls (1998),7|5
+1377,MirrorMask (2005),8|1
+1378,Kramer vs. Kramer (1979),7
+1379,Miller's Crossing (1990),7|5|9
+1380,Dark Water (2005),7|10
+1381,Babe (1995),8|7|4|2
+1382,Mickey Blue Eyes (1999),5
+1383,Class (1983),None
+1384,Can't Hardly Wait (1998),None
+1385,Play Misty for Me (1971),5|12
+1386,The Master (2012),7
+1387,Green Lantern (2011),8|0|14
+1388,Nick and Norah's Infinite Playlist (2008),None
+1389,Across the Universe (2007),8|7|11|13
+1390,School Daze (1988),11
+1391,Touching the Void (2003),7|6
+1392,RoboCop 2 (1990),0|14
+1393,Fletch (1985),5|4|12
+1394,Sabrina (1954),None
+1395,The Crow (1994),8|0|14|10
+1396,Marty (1955),7|13
+1397,Empire Records (1995),7
+1398,Ghost (1990),8|7|13
+1399,Two if by Sea (1996),None
+1400,On the Waterfront (1954),7|5
+1401,Dersu Uzala (1975),7
+1402,13 Assassins (2010),0|7
+1403,Art School Confidential (2006),7|4
+1404,Lost Highway (1997),7|15|10|12|9
+1405,Predator 2 (1990),0|14|10
+1406,Mission to Mars (2000),0|1|14|15
+1407,Free Willy (1993),7
+1408,Tower Heist (2011),4
+1409,The Return of the Living Dead (1985),14|4
+1410,The House Bunny (2008),None
+1411,Dragonheart (1996),8|0|1
+1412,Mr. Woodcock (2007),4
+1413,Grease 2 (1982),7|11
+1414,The Shipping News (2001),7|13
+1415,Supergirl (1984),8|0|14|3
+1416,Finding Forrester (2000),7
+1417,Clockers (1995),7|5|12
+1418,L.A. Story (1991),8
+1419,Wonder (2017),7
+1420,Bridget Jones: The Edge of Reason (2004),7
+1421,Romy and Michele's High School Reunion (1997),4
+1422,Wicker Park (2004),7|12|13
+1423,Smoke Signals (1998),None
+1424,Ice Age 4: Continental Drift (2012),8|3
+1425,The Great Muppet Caper (1981),4|12|11
+1426,Richie Rich (1994),4
+1427,L.A. Confidential (1997),7|15|5|12
+1428,Scary Movie 2 (2001),None
+1429,American Wedding (2003),None
+1430,The Naked Gun 2 1/2: The Smell of Fear (1991),4
+1431,The Hustler (1961),7
+1432,Shakespeare in Love (1998),7
+1433,The Aristocats (1970),8|11|3
+1434,101 Dalmatians (1996),8|4|3
+1435,Space Cowboys (2000),1|14|7
+1436,Fiddler on the Roof (1971),7|11
+1437,Rango (2011),4|17|3
+1438,Sixteen Candles (1984),None
+1439,Hot Tub Time Machine (2010),14
+1440,Dawn of the Planet of the Apes (2014),14
+1441,Orphan (2009),7|15|10|12
+1442,Grizzly Man (2005),6
+1443,My Cousin Vinny (1992),4
+1444,Wet Hot American Summer (2001),None
+1445,Dogma (1999),8|4
+1446,Be Kind Rewind (2007),7|4
+1447,Scary Movie 3 (2003),14
+1448,The Limey (1999),7|5
+1449,Uptown Girls (2003),7|4
+1450,Making Mr. Right (1987),14
+1451,Altered States (1980),8|14|7|15|10
+1452,Chasing Amy (1997),7|4|13
+1453,Clerks (1994),7|4
+1454,Fury (2014),0|7|16
+1455,Neighbors 2: Sorority Rising (2016),4
+1456,The House of the Spirits (1993),7|13
+1457,Date Night (2010),0|5|4
+1458,Sabrina (1995),7
+1459,The Room (2003),7|13
+1460,Whip It (2009),7
+1461,The Girl Who Leapt Through Time (2006),14|13
+1462,Evan Almighty (2007),8|4
+1463,Singin' in the Rain (1952),11
+1464,Austin Powers: The Spy Who Shagged Me (1999),None
+1465,The Adjustment Bureau (2011),8|0|14|15|13
+1466,Date Movie (2006),7
+1467,Disaster Movie (2008),4
+1468,Superman Returns (2006),0|14
+1469,Epic Movie (2007),4
+1470,The Lizzie McGuire Movie (2003),11
+1471,Dr. Seuss' The Lorax (2012),8|4|11
+1472,Olympus Has Fallen (2013),0|15
+1473,The Time Traveler's Wife (2009),8|14|7|13
+1474,The Bachelor (1999),None
+1475,Intolerable Cruelty (2003),7|5
+1476,Police Academy 3: Back in Training (1986),0
+1477,The Raid: Redemption (2011),0|5
+1478,Role Models (2008),None
+1479,Lethal Weapon 3 (1992),0|15|5
+1480,FLCL (2000),4
+1481,Punisher: War Zone (2008),0|7
+1482,Hostel (2005),15|10
+1483,Face/Off (1997),0|14|15|5
+1484,Melancholia (2011),14|7
+1485,Frankenstein (1931),14|10
+1486,10 Cloverfield Lane (2016),0|14|7|15|10
+1487,Project X (2012),4
+1488,Die Another Day (2002),0|1
+1489,Hitman (2007),0|7|15
+1490,Spy Hard (1996),0|4
+1491,Freddy vs. Jason (2003),None
+1492,Small Soldiers (1998),8|0|1|14|4
+1493,"The Way, Way Back (2013)",7|4
+1494,Paddington (2014),4
+1495,Return to Me (2000),7
+1496,The Chamber (1996),7|15
+1497,This Is 40 (2012),None
+1498,I Heart Huckabees (2004),7|4
+1499,The Accused (1988),7|5
+1500,Das Experiment (2001),7|15
+1501,Dumb and Dumber To (2014),4
+1502,48 Hrs. (1982),15|4
+1503,The Legend of Bagger Vance (2000),8|7
+1504,The Abyss (1989),14
+1505,My Fair Lady (1964),7|11|13
+1506,Wings of Desire (1987),8|7
+1507,Invictus (2009),7
+1508,Life as We Know It (2010),7
+1509,U-571 (2000),0|16
+1510,The Legend of Drunken Master (1994),0
+1511,Bowfinger (1999),4
+1512,Super Size Me (2004),6
+1513,RoboCop (1987),0|14|15
+1514,Van Helsing (2004),8|0|10
+1515,Mission: Impossible II (2000),0|15
+1516,Jackass Number Two (2006),0|4|6
+1517,The Exorcism of Emily Rose (2005),7|15|10
+1518,Hunt for the Wilderpeople (2016),1|7|4
+1519,Celtic Pride (1996),4
+1520,In Good Company (2004),7
+1521,Quiz Show (1994),7
+1522,Son in Law (1993),None
+1523,The Assassination of Jesse James by the Coward Robert Ford (2007),7|17
+1524,Jerry Maguire (1996),7|4|13
+1525,Monster (2003),7|5
+1526,Steve Jobs (2015),7
+1527,Braveheart (1995),0|7|16
+1528,Hancock (2008),8|0|14|7|4
+1529,All Dogs Go to Heaven (1989),8|7|11
+1530,Donnie Darko (2001),8|14|7|10|12
+1531,The Village (2004),7|15|10|12
+1532,Drunken Master (1978),0
+1533,Much Ado About Nothing (1993),None
+1534,Hanna (2011),0|15
+1535,Shanghai Noon (2000),0|4|17
+1536,The Change-Up (2011),4
+1537,About a Boy (2002),7
+1538,Drop Dead Gorgeous (1999),None
+1539,What We Do in the Shadows (2014),10|4|6
+1540,Dark Shadows (2012),8|4
+1541,Hamlet (1996),7
+1542,Due Date (2010),4
+1543,Meet Joe Black (1998),8|7|13
+1544,The Forbidden Kingdom (2008),8|0
+1545,The Last King of Scotland (2006),7
+1546,Deuce Bigalow: Male Gigolo (1999),4
+1547,Friday Night Lights (2004),0|7
+1548,The Band's Visit (2007),7|4
+1549,A Walk to Remember (2002),7|13
+1550,Knight and Day (2010),0|1|4
+1551,Mona Lisa Smile (2003),7|4|13
+1552,Something to Talk About (1995),7
+1553,Elizabethtown (2005),None
+1554,Clear and Present Danger (1994),0|7|15
+1555,Dr. Dolittle 2 (2001),8|4
+1556,Agent Cody Banks (2003),0|3
+1557,Louis C.K.: Chewed Up (2008),None
+1558,Johnny English Reborn (2011),4
+1559,Hannibal (2001),7|15|10
+1560,Perfume: The Story of a Murderer (2006),8|7|15|10
+1561,The Three Caballeros (1944),8|11|3
+1562,Wolf Children (2012),7|3
+1563,Star Trek: The Motion Picture (1979),1|14
+1564,While You Were Sleeping (1995),None
+1565,Mr. Smith Goes to Washington (1939),7|4
+1566,Chicago (2002),7|4|11
+1567,The Fugitive (1993),0|15|5
+1568,Crank: High Voltage (2009),0|15
+1569,"The Karate Kid, Part II (1986)",0|7|13
+1570,Paul Blart: Mall Cop 2 (2015),4
+1571,Candyman: Farewell to the Flesh (1995),10
+1572,Trainwreck (2015),4
+1573,Deuce Bigalow: European Gigolo (2005),4
+1574,Firewall (2006),0|7|5
+1575,The Thin Blue Line (1988),6
+1576,Wolf (1994),7
+1577,Heavyweights (1995),4|3
+1578,The Secret of NIMH (1982),8|1
+1579,The Adventures of Buckaroo Banzai Across the 8th Dimension (1984),14|4
+1580,Coneheads (1993),1|14|4
+1581,Coming to America (1988),None
+1582,Femme Fatale (2002),5
+1583,Crazy/Beautiful (2001),7|13
+1584,Bubble Boy (2001),8|4
+1585,Bridge of Spies (2015),16
+1586,The Inbetweeners Movie (2011),4
+1587,Indochine (1992),7|16|13
+1588,Starsky & Hutch (2004),0|4
+1589,The Pianist (2002),7|16|11
+1590,White Men Can't Jump (1992),4
+1591,Tombstone (1993),7|17
+1592,Million Dollar Baby (2004),7
+1593,Blade II (2002),8|0|14|15|10
+1594,The Fountain (2006),8|1|14|7|13
+1595,Mad Max (1979),0
+1596,The Men Who Stare at Goats (2009),16|4
+1597,Training Day (2001),0|5
+1598,Midnight Express (1978),7|5
+1599,Four Brothers (2005),0|7|15|5|12
+1600,Serpico (1973),0|7|5
+1601,The Pursuit of Happyness (2006),7
+1602,Prisoners (2013),7|5
+1603,Night at the Museum: Battle of the Smithsonian (2009),8|0|1
+1604,Puss in Boots (2011),8
+1605,Evil Dead II (1987),None
+1606,Dracula (1931),7|10
+1607,Dr. No (1962),0
+1608,Black Mirror: White Christmas (2014),None
+1609,Con Air (1997),0|15
+1610,Futurama: Into the Wild Green Yonder (2008),14|4
+1611,Nell (1994),7
+1612,The World According to Garp (1982),7
+1613,Jumanji (1995),8|0|4
+1614,Sleepless in Seattle (1993),7
+1615,Scent of a Woman (1992),7
+1616,High Fidelity (2000),7|4|11
+1617,Batman Returns (1992),8|0
+1618,As Good as It Gets (1997),7|4|13
+1619,Slap Shot (1977),7|4
+1620,Batman (1966),8|0|4
+1621,Toys (1992),8|1|14|4
+1622,A Bridge Too Far (1977),0|7|16
+1623,The Boy in the Striped Pajamas (2008),7
+1624,Saving Private Ryan (1998),0|7|16
+1625,Transcendence (2014),0|14|7|15
+1626,Crash (2004),7|5
+1627,Copycat (1995),10|5|12
+1628,A Bug's Life (1998),4
+1629,The Land Before Time (1988),1|7
+1630,Pokémon: The First Movie (1998),None
+1631,The Seven Year Itch (1955),4
+1632,Body Heat (1981),7|12
+1633,The Man Who Knew Too Much (1956),7|5|12|9
+1634,American Beauty (1999),7
+1635,The Aviator (2004),7
+1636,DiG! (2004),6
+1637,Little Big Man (1970),0|1|7|16|4|17
+1638,Dan in Real Life (2007),7
+1639,Office Space (1999),4
+1640,1984 (1984),14|7
+1641,Scoop (2006),5|12
+1642,Rules of Engagement (2000),0|7|12
+1643,American Ultra (2015),0
+1644,The Quiet American (2002),7|12|13
+1645,Ben-Hur (1959),0|7
+1646,The Wave (2008),7
+1647,The Good Shepherd (2006),0|7|5
+1648,East of Eden (1955),7|13
+1649,Gone Baby Gone (2007),7|5|12
+1650,The People vs. Larry Flynt (1996),7
+1651,Valkyrie (2008),7|16
+1652,Kinsey (2004),7
+1653,The Client (1994),7|5|12
+1654,The Natural (1984),7|13
+1655,Capote (2005),7|5
+1656,Mike & Dave Need Wedding Dates (2016),1|4|13
+1657,The Towering Inferno (1974),0
+1658,Hercules (2014),8|0
+1659,Eight Crazy Nights (2002),4|11
+1660,Gremlins 2: The New Batch (1990),8|14|10|4
+1661,It's Complicated (2009),None
+1662,Independence Day: Resurgence (2016),0|14|16
+1663,The Invisible (2007),8|7|15|10
+1664,The Chorus (2004),7|11
+1665,K-PAX (2001),14|7
+1666,The Waterboy (1998),4
+1667,Attack of the Killer Tomatoes! (1978),14|10|11
+1668,The Stepford Wives (2004),14|7|4
+1669,¡Three Amigos! (1986),4|17
+1670,Taken 3 (2015),0|15
+1671,Elite Squad: The Enemy Within (2010),7|5
+1672,Jennifer 8 (1992),15|12
+1673,The Blob (1958),14|10
+1674,The Fly (1958),14|10|12
+1675,Species (1995),14|10
+1676,Conan the Barbarian (1982),8|0|1
+1677,Forbidden Planet (1956),0|1|14|7
+1678,Passenger 57 (1992),0|15
+1679,The Manchurian Candidate (2004),7|15
+1680,Beverly Hills Cop (1984),0|4
+1681,Contact (1997),14|7
+1682,This Is Spinal Tap (1984),11
+1683,Far from Heaven (2002),7|13
+1684,Resident Evil: Apocalypse (2004),0|14|10
+1685,The Cable Guy (1996),4|12
+1686,The Quick and the Dead (1995),17
+1687,Romeo Must Die (2000),0|7|13
+1688,Identity (2003),15|10|12
+1689,Timeline (2003),0|1|14|15
+1690,The Ninth Gate (1999),15|10|12
+1691,Eastern Promises (2007),7|5|12
+1692,Riddick (2013),0|14|15
+1693,Piranha 3DD (2012),14
+1694,And Your Mother Too (2001),7|4
+1695,Meet Wally Sparks (1997),4
+1696,Bewitched (2005),8|4
+1697,The Manhattan Project (1986),15
+1698,Bloody Sunday (2002),7|16
+1699,Cinema Paradiso (1988),7
+1700,The Night Before (2015),4
+1701,Fun with Dick and Jane (2005),4
+1702,Casino (1995),7|5
+1703,Transformers: The Movie (1986),0|1|14
+1704,Sweet Home Alabama (2002),None
+1705,"It's a Mad, Mad, Mad, Mad World (1963)",None
+1706,Zack and Miri Make a Porno (2008),7
+1707,Tooth Fairy (2010),8|4
+1708,Sorority Boys (2002),4
+1709,Daddy Day Care (2003),4|3
+1710,Leap of Faith (1992),4
+1711,Baby Geniuses (1999),14|4|3
+1712,Casino Royale (1967),None
+1713,Octopussy (1983),0|15
+1714,Penelope (2006),8
+1715,Dinosaur (2000),8|1|11
+1716,The Perks of Being a Wallflower (2012),7|13
+1717,War for the Planet of the Apes (2017),0|14|7|16
+1718,Fantasia (1940),8|11
+1719,Run Fatboy Run (2007),None
+1720,Grave of the Fireflies (1988),7
+1721,The Croods (2013),8|1|4
+1722,Room (2015),7
+1723,Christine (1983),7|15|10|12
+1724,What Women Want (2000),8|14
+1725,Ip Man (2008),0
+1726,Coyote Ugly (2000),7|11
+1727,Love and Basketball (2000),7|13
+1728,Sergeant York (1941),7|16
+1729,Primary Colors (1998),7|5|4
+1730,The Dinner Game (1998),4
+1731,Hush (2016),15|10
+1732,Whisper of the Heart (1995),1|7|13
+1733,Alien: Resurrection (1997),0|1|14|10
+1734,Magic Mike (2012),7|4
+1735,The Long Goodbye (1973),7|5|12|9
+1736,Evangelion: 3.0 You Can  Redo (2012),14
+1737,The Descent (2005),1|10
+1738,Real Steel (2011),0|14|7
+1739,Poison Ivy: New Seduction (1997),None
+1740,An American Tail (1986),7
+1741,Persepolis (2007),7
+1742,Shame (2011),7
+1743,Jay and Silent Bob Strike Back (2001),None
+1744,Stalker (1979),14|7
+1745,"Black Cat, White Cat (1998)",7|5|11
+1746,Girl 6 (1996),None
+1747,She's Gotta Have It (1986),7
+1748,Resident Evil (2002),0|14|10
+1749,Ghost Dog: The Way of the Samurai (1999),0|7|15|5
+1750,The African Queen (1951),7
+1751,Summer Rental (1985),None
+1752,Sneakers (1992),0|7|5|4|12
+1753,Muppets From Space (1999),1|14|4|3
+1754,Dead Again (1991),7|12
+1755,Gladiator (1992),0|7
+1756,The Others (2001),7|15|12
+1757,Paranormal Activity (2007),15|10
+1758,You Only Live Twice (1967),0
+1759,Secretary (2002),7|13
+1760,The Motorcycle Diaries (2004),1|7
+1761,Howards End (1992),7
+1762,Ladyhawke (1985),8|1|7|13
+1763,xXx: State of the Union (2005),0|1|15
+1764,Superman III (1983),0|14|4
+1765,Freeway (1996),10
+1766,Stealth (2005),0|14|15
+1767,The Incredible Journey (1963),None
+1768,Celebrity (1998),4
+1769,Marley & Me (2008),None
+1770,The Kid Stays in the Picture (2002),6
+1771,Teenage Mutant Ninja Turtles II: The Secret of the Ooze (1991),8|0|14|4
+1772,The Last of the Mohicans (1992),7|16|13
+1773,Saved! (2004),7
+1774,Cat on a Hot Tin Roof (1958),7
+1775,The Bridges of Madison County (1995),7|13
+1776,Cloud Atlas (2012),8|14|7|12
+1777,Step Up (2006),7|5|11|13
+1778,Dead Snow (2009),None
+1779,Grown Ups 2 (2013),4
+1780,Zero Dark Thirty (2012),7|15|16
+1781,Windtalkers (2002),0|7|16
+1782,The Adventures of Ichabod and Mr. Toad (1949),8|11|3
+1783,A Fistful of Dollars (1964),17
+1784,K-19: The Widowmaker (2002),7|15
+1785,Easter Parade (1948),11
+1786,Song of the South (1946),8|7|11
+1787,Theodore Rex (1995),4
+1788,Rebecca (1940),7|12|13
+1789,Carnage (2011),7|4
+1790,Warcraft (2016),8|0|1
+1791,Money Train (1995),0|4
+1792,Sliver (1993),15|5|12
+1793,The Road Warrior (1981),0|14
+1794,White Noise (2005),7|15|10|12
+1795,Saw VI (2009),10
+1796,The Ladykillers (2004),4
+1797,Sex Drive (2008),4
+1798,The Edge (1997),0|1|7
+1799,Earth Girls Are Easy (1989),14|11
+1800,Kull the Conqueror (1997),8|0
+1801,Courage Under Fire (1996),0|7|15|16|12
+1802,House on Haunted Hill (1999),15|10
+1803,Pee-wee's Big Adventure (1985),4
+1804,Jack (1996),7|4
+1805,Jackass 3D (2010),4
+1806,The Intern (2015),4
+1807,Cinderella Man (2005),7
+1808,Downfall (2004),7|16
+1809,Home Alone 2: Lost in New York (1992),4|12
+1810,Dredd (2012),0|14
+1811,Mortal Kombat: Annihilation (1997),8|0
+1812,Scarface (1983),0|7
+1813,Rob Roy (1995),0|7|16|13
+1814,42nd Street (1933),7|11
+1815,Rock Star (2001),7|11
+1816,Gothika (2003),15|10
+1817,Double Jeopardy (1999),15
+1818,From Dusk Till Dawn (1996),0|15|10|5
+1819,Hot Shots! Part Deux (1993),None
+1820,Patch Adams (1998),7|4
+1821,Year One (2009),8
+1822,The Witches (1990),8|10|4|3
+1823,Just Friends (2005),None
+1824,Platoon (1986),0|7|16
+1825,Pieces of April (2003),7|4
+1826,Shaft (1971),0|7|5|12
+1827,All That Jazz (1979),7|11
+1828,Cocktail (1988),7|13
+1829,Dreamcatcher (2003),14|10
+1830,Behind Enemy Lines (2001),0|7|15|16
+1831,Erin Brockovich (2000),7
+1832,Requiem for a Dream (2000),7
+1833,House Party 2 (1991),11
+1834,Freddy's Dead: The Final Nightmare (1991),8
+1835,The Tourist (2010),0|7|5
+1836,Bolt (2008),1|4|3
+1837,The Skin I Live In (2011),14|7|10
+1838,300: Rise of an Empire (2014),8|0|7|16
+1839,The Sword in the Stone (1963),8|11
+1840,The Purge: Anarchy (2014),0|15|10
+1841,Lord of the Flies (1990),1|7
+1842,Charlie's Angels: Full Throttle (2003),0|1|4
+1843,The Smurfs (2011),8|4|3
+1844,The Powerpuff Girls (2002),8|0|14|3
+1845,Of Mice and Men (1992),7
+1846,The Grey (2011),0|1|7
+1847,Unstoppable (2010),0|15
+1848,The Three Musketeers (2011),0|1|7|4|13
+1849,Pride & Prejudice (2005),7|13
+1850,American Splendor (2003),7|4
+1851,First Knight (1995),0|1|7|16|13
+1852,Goldfinger (1964),0
+1853,The Hunt for Red October (1990),0|7|15|16
+1854,The Reaping (2007),10
+1855,Piranha (2010),14
+1856,Cabaret (1972),7|11
+1857,Bullitt (1968),0|5
+1858,Kung Fu Hustle (2004),0
+1859,Before Night Falls (2000),7|13
+1860,Lords of Dogtown (2005),7
+1861,The Love Guru (2008),None
+1862,Papillon (1973),7
+1863,Get Smart (2008),0
+1864,The Prince & Me (2004),None
+1865,A Tale of Two Sisters (2003),7|10|12
+1866,The Postman (1994),7|13
+1867,License to Drive (1988),None
+1868,Ray (2004),7|11
+1869,The Illusionist (2006),8|7|13
+1870,The Exorcist (1973),10
+1871,Seven Psychopaths (2012),7|5|4|12
+1872,Sing (2016),7|4|11
+1873,The Return of the Pink Panther (1975),4
+1874,The Core (2003),0|14
+1875,The Pacifier (2005),0|7|4
+1876,The Day the Earth Stood Still (1951),14|7
+1877,Rear Window (1954),15|12
+1878,Austin Powers: International Man of Mystery (1997),5
+1879,The Invention of Lying (2009),8
+1880,House of Wax (2005),10
+1881,Lawrence of Arabia (1962),1|7|16
+1882,The Birds (1963),14|7|10
+1883,Escape from New York (1981),0|14|15
+1884,The Sting (1973),7|4
+1885,"Doctor Who: The Doctor, the Widow and the Wardrobe (2011)",None
+1886,North by Northwest (1959),15|5|12
+1887,"The Adventures of Priscilla, Queen of the Desert (1994)",None
+1888,The Evil Dead (1981),8|7|10
+1889,Hellbound: Hellraiser II (1989),8|10
+1890,Religulous (2008),6
+1891,No Strings Attached (2011),7
+1892,American Reunion (2012),4
+1893,Nanny McPhee (2005),8|3
+1894,The Wind Rises (2013),7
+1895,White Chicks (2004),4
+1896,The Seventh Seal (1957),8|7
+1897,21 (2008),7|5
+1898,Antz (1998),8|3
+1899,Coach Carter (2005),7
+1900,Before Midnight (2013),7|13
+1901,Superman IV: The Quest for Peace (1987),0|14
+1902,In Time (2011),0|14|15|5
+1903,Safe House (2012),0|15|5
+1904,Bean (1997),4
+1905,Aeon Flux (2005),0|14
+1906,The Aristocrats (2005),6
+1907,Mimic (1997),14|10
+1908,The Dukes of Hazzard (2005),4
+1909,Mr. Magoo (1997),4
+1910,Meet the Robinsons (2007),8|1|14|4|3
+1911,This Is England (2006),7|5
+1912,Simon Birch (1998),7|4
+1913,The Madness of King George (1994),7|4
+1914,Traffic (2000),7|5
+1915,Summer of Sam (1999),7|5
+1916,Jesus Christ Superstar (1973),7|11
+1917,Fast Food Nation (2006),7|6
+1918,The Changeling (1980),15|10|12
+1919,Friday the 13th Part 3: 3D (1982),None
+1920,Ladder 49 (2004),0|7
+1921,Blue Streak (1999),0|4
+1922,Leprechaun (1993),8|10
+1923,Masters of the Universe (1987),8|0|1
+1924,Snow White and the Seven Dwarfs (1937),8|11|13
+1925,Primer (2004),14|7
+1926,Gattaca (1997),14|7
+1927,Beavis and Butt-Head Do America (1996),4
+1928,Teenage Mutant Ninja Turtles III (1993),8|0|14|4
+1929,Mystic River (2003),7|12
+1930,True Romance (1993),0|7|15|5|13
+1931,When Harry Met Sally... (1989),4
+1932,Patriot Games (1992),0|7|15|5
+1933,Butch Cassidy and the Sundance Kid (1969),17
+1934,American Graffiti (1973),7
+1935,Passengers (2015),1|14|7|15|13
+1936,Hell or High Water (2016),7|5
+1937,Footloose (1984),7|11|13
+1938,Raising Helen (2004),7
+1939,Jackass: The Movie (2002),0|4
+1940,Battle: Los Angeles (2011),0|14|16
+1941,The Santa Clause 2 (2002),8|3
+1942,The Shaggy Dog (1959),8|4|3
+1943,Kong: Skull Island (2017),8|0
+1944,How High (2001),4
+1945,Ace Ventura: When Nature Calls (1995),4
+1946,Don't Be a Menace to South Central While Drinking Your Juice in the Hood (1996),4
+1947,Eraserhead (1977),8|7|10
+1948,The Man in the Iron Mask (1998),0|1|7|4
+1949,The Animal (2001),14|4
+1950,Because I Said So (2007),None
+1951,Planet Earth,6
+1952,Observe and Report (2009),7|5|4
+1953,The Wrong Man (1956),7|5|9
+1954,Funny People (2009),7|4
+1955,Superman II (1980),8|0|14
+1956,Twister (1996),0|7
+1957,Village of the Damned (1995),14|10
+1958,The Shaggy D.A. (1976),8|4|3
+1959,The Beverly Hillbillies (1993),4
+1960,Herbie Rides Again (1974),8|0|4|3
+1961,Hoop Dreams (1994),6
+1962,My Neighbor Totoro (1987),8|3
+1963,Shaolin Soccer (2001),0
+1964,Hairspray (1988),7|11
+1965,Taken (2008),0
+1966,Lost in Space (1998),0|1|14|15
+1967,Garden State (2004),7
+1968,Color of Night (1994),7|15|5|12
+1969,Highlander (1986),8|0|1|14|15
+1970,Underworld: Rise of the Lycans (2009),8|15|10
+1971,Anastasia (1997),8|7|11|2
+1972,Field of Dreams (1989),8|7
+1973,Jaws: The Revenge (1987),1|15|10
+1974,Love Me If You Dare (2003),7
+1975,Ichi the Killer (2001),7|5
+1976,Young Sherlock Holmes (1985),12
+1977,Ed Wood (1994),7|4
+1978,Layer Cake (2004),7|5
+1979,Risky Business (1983),None
+1980,Summer School (1987),10|4
+1981,Inventing the Abbotts (1997),7|13
+1982,True Lies (1994),0|15
+1983,Michael (1996),8|7
+1984,The Substitute (1996),0|15|5
+1985,Pi (1998),14|7|15|10
+1986,Pretty in Pink (1986),None
+1987,Last Holiday (2006),8|7
+1988,Ever After: A Cinderella Story (1998),8|7
+1989,Jonah Hex (2010),8|0|10|4|17
+1990,Heaven Can Wait (1978),8
+1991,Fired Up (2009),4
+1992,Girls Just Want to Have Fun (1985),11
+1993,Teenage Mutant Ninja Turtles (1990),8|0|14|4
+1994,Eddie the Eagle (2016),7
+1995,The Producers (2005),4|11
+1996,The Wedding Planner (2001),7
+1997,The Heartbreak Kid (2007),7
+1998,"New York, I Love You (2009)",7
+1999,Mr. Wrong (1996),None
+2000,Mr. Peabody & Sherman (2014),8|1|14|4|3|2
+2001,Revolutionary Road (2008),7|13
+2002,I Saw the Devil (2010),None
+2003,The Adventures of Baron Munchausen (1988),8|1|4
+2004,All About Eve (1950),7|4
+2005,Out of Africa (1985),7|13
+2006,The Next Karate Kid (1994),0|7
+2007,The Patriot (2000),0|16
+2008,So I Married an Axe Murderer (1993),5|4
+2009,Sucker Punch (2011),8|0|15
+2010,Friends with Benefits (2011),4
+2011,Searching for Sugar Man (2012),6
+2012,He's Just Not That Into You (2009),7
+2013,Mirror Mirror (2012),8
+2014,Boyz N the Hood (1991),7|5|13
+2015,The Fast and the Furious (2001),0|15|5
+2016,I Still Know What You Did Last Summer (1998),15|10
+2017,Ghost Ship (2002),None
+2018,Diary of the Dead (2007),14|10
+2019,Solaris (2002),1|14|7|12|13
+2020,Backdraft (1991),0|7|15|5
+2021,Flawless (1999),7|5|4
+2022,Beowulf (2007),8|0|1|7
+2023,Joy (2015),7|4
+2024,Cecil B. DeMented (2000),5|4
+2025,The Graduate (1967),7
+2026,Tarzan (1999),1|11
+2027,Once (2006),11
+2028,Addams Family Values (1993),8|10|4
+2029,House of Flying Daggers (2004),8|0|1|7|13
+2030,Mighty Joe Young (1949),8|14|7|10
+2031,Three Men and a Baby (1987),4
+2032,Splice (2009),14|10
+2033,Return to the Blue Lagoon (1991),7|13
+2034,Three Colors: White (1994),7|13
+2035,Tucker & Dale vs Evil (2010),10|4
+2036,Confessions of a Shopaholic (2009),None
+2037,"Rudolph, the Red-Nosed Reindeer (1964)",11
+2038,The Hunted (2003),0|7|5
+2039,Walking Tall (2004),0|7
+2040,Forces of Nature (1999),None
+2041,Outrageous Fortune (1987),4
+2042,Rambo III (1988),0|15|16
+2043,All the King's Men (2006),7|15
+2044,Local Hero (1983),4
+2045,Paycheck (2003),0|14
+2046,Private Benjamin (1980),4
+2047,Diner (1982),7|4
+2048,Rocky IV (1985),0|7
+2049,The Dead Zone (1983),14|10|12
+2050,The In-Laws (2003),4
+2051,Three Kings (1999),0|16
+2052,Mutiny on the Bounty (1935),1
+2053,Trial and Error (1997),None
+2054,Body Snatchers (1993),14|10|12
+2055,Magnum Force (1973),0
+2056,Stealing Beauty (1996),7|13
+2057,Malibu's Most Wanted (2003),4
+2058,The Last Starfighter (1984),0|1|14
+2059,Josie and the Pussycats (2001),11
+2060,Black Mass (2015),0|7|5
+2061,Jungle2Jungle (1997),4
+2062,The Polar Express (2004),8|1|3
+2063,Fanboys (2009),4
+2064,The Straight Story (1999),1|7
+2065,Everyone Says I Love You (1996),11
+2066,The Maltese Falcon (1931),0|7|5|12|9
+2067,The Man Who Knew Too Little (1997),4
+2068,The Score (2001),0|7|15
+2069,Enemy Mine (1985),0|1|14|7
+2070,Brothers (2009),7|15|16
+2071,Wall Street (1987),7|5
+2072,Keeping the Faith (2000),7
+2073,The DUFF (2015),4
+2074,American History X (1998),7|5
+2075,The Englishman Who Went Up a Hill But Came Down a Mountain (1995),4
+2076,The 13th Warrior (1999),8|0|1|15
+2077,Memoirs of a Geisha (2005),7|13
+2078,Tomb Raider (2018),0|1
+2079,Fear and Loathing in Las Vegas (1998),7
+2080,Child's Play 3 (1991),0|10
+2081,Live Flesh (1997),7|13
+2082,Muriel's Wedding (1994),7
+2083,Grindhouse (2007),0|10
+2084,Funny Farm (1988),4
+2085,Charlotte's Web (1973),11
+2086,Nine Months (1995),None
+2087,"Salo, or The 120 Days of Sodom (1975)",7
+2088,Office Christmas Party (2016),4
+2089,The Expendables 3 (2014),0|15
+2090,The Boondock Saints II: All Saints Day (2009),0|7
+2091,Collateral (2004),0|7|15|5
+2092,Freaks (1932),7|15|10
+2093,Infernal Affairs (2002),7|5
+2094,"O Brother, Where Art Thou? (2000)",5|4|11
+2095,Legend (1985),8|1
+2096,The Red Violin (1998),7|5|12|13
+2097,Battlefield Earth (2000),0|14
+2098,Caddyshack (1980),4
+2099,Ip Man 2 (2010),0
+2100,Kate & Leopold (2001),8|14
+2101,The Haunting (1999),8|10|12
+2102,Logan's Run (1976),0|14
+2103,The Last Samurai (2003),0|7|16
+2104,Hellraiser (1987),10
+2105,Top Gun (1986),0|7|13
+2106,Elektra (2005),8|0|7|5
+2107,Paranormal Activity 2 (2010),10
+2108,The Green Mile (1999),8|7
+2109,War Dogs (2016),7|16|5|4
+2110,Mr. Mom (1983),7|4
+2111,Godzilla 2000 (1999),8|14
+2112,All the King's Men (1950),7|9
+2113,Jack Reacher (2012),0|5
+2114,Mighty Morphin Power Rangers: The Movie (1995),8|14|16
+2115,Red Dawn (1984),0|1|15|16
+2116,Tomorrow Never Dies (1997),0|15
+2117,Diamonds Are Forever (1971),0
+2118,Zoolander 2 (2016),4
+2119,Stagecoach (1939),0|7|17
+2120,King Kong (1933),8|1|7|10
+2121,A Little Princess (1995),8|7|4|3
+2122,West Side Story (1961),7|5|11|13
+2123,Flight of the Phoenix (2004),0|7
+2124,Balls of Fury (2007),4
+2125,Wag the Dog (1997),None
+2126,The Lodger: A Story of the London Fog (1927),15|10|5
+2127,The Devil's Advocate (1997),8|7|15|10|12
+2128,Go (1999),0|15|5|4
+2129,"20,000 Leagues Under the Sea (1954)",14|7
+2130,The Darjeeling Limited (2007),7|4
+2131,Meet Me in St. Louis (1944),7|11
+2132,A Night at the Opera (1935),11
+2133,Catch-22 (1970),16
+2134,Bottle Rocket (1996),4
+2135,"Synecdoche, New York (2008)",7|4
+2136,Invasion of the Body Snatchers (1956),14|10
+2137,2010: The Year We Make Contact (1984),1|14|7|12
+2138,Ghostbusters II (1989),8|14|4
+2139,Hearts of Darkness: A Filmmakers Apocalypse (1991),6
+2140,Run Lola Run (1998),7
+2141,Southpaw (2015),0|7
+2142,The League of Extraordinary Gentlemen (2003),None
+2143,A Decade Under the Influence (2003),6
+2144,American: The Bill Hicks Story (2009),6
+2145,Hairspray (2007),7|11
+2146,She's Out of My League (2010),None
+2147,Club Dread (2004),10
+2148,Project Almanac (2015),14
+2149,Guys and Dolls (1955),5|4|11
+2150,Mo' Better Blues (1990),7|11
+2151,Sgt. Bilko (1996),4
+2152,That's My Boy (2012),4
+2153,Joe Dirt (2001),1|4
+2154,The Five-Year Engagement (2012),None
+2155,Sophie Scholl: The Final Days (2005),7
+2156,Sky Captain and the World of Tomorrow (2004),8|0|1|14
+2157,Kiss of the Spider Woman (1985),7
+2158,Halloween (2007),10
+2159,Home (2015),8|14|4|11
+2160,The Chronicles of Riddick (2004),0|1|14
+2161,Wrath of the Titans (2012),8|0
+2162,Police Academy 5: Assignment: Miami Beach (1988),5|4
+2163,The Guilt Trip (2012),7|4
+2164,Grass (1999),6
+2165,Hustle & Flow (2005),7|11
+2166,John Tucker Must Die (2006),None
+2167,Lady Bird (2017),7
+2168,Waiting... (2005),4
+2169,The Specialist (1994),0|15
+2170,The Brothers Grimsby (2016),1|4
+2171,Babel (2006),7
+2172,The Ten Commandments (1956),7
+2173,"The Goods: Live Hard, Sell Hard (2009)",4
+2174,Master and Commander: The Far Side of the World (2003),0|1|16
+2175,Knockin' on Heaven's Door (1997),0|7|4
+2176,When a Man Loves a Woman (1994),7|13
+2177,Win a Date with Tad Hamilton! (2004),None
+2178,The Thirteenth Floor (1999),8|14|15|12
+2179,Vampire in Brooklyn (1995),4
+2180,The Simpsons: The Longest Daycare (2012),4
+2181,The Thomas Crown Affair (1999),7|4|12
+2182,Final Destination 3 (2006),10
+2183,Appleseed (2004),0|14
+2184,Big Night (1996),7|4
+2185,She's the Man (2006),None
+2186,The NeverEnding Story (1984),8|7|3
+2187,Urban Legend (1998),10
+2188,August Rush (2007),7|11|13
+2189,The Cooler (2003),7|4|13
+2190,Impostor (2001),0|14|7
+2191,Runaway Train (1985),0|7|15
+2192,Bill & Ted's Excellent Adventure (1989),14|4
+2193,The Three Musketeers (1973),0|1
+2194,Major Payne (1995),None
+2195,Pleasantville (1998),8|7|4
+2196,The Legend of Zorro (2005),0
+2197,Major League (1989),4
+2198,The Cook the Thief His Wife & Her Lover (1989),7|5
+2199,South Pacific (1958),7|16|11|13
+2200,Bend It Like Beckham (2002),7|4|11
+2201,Short Cuts (1993),7
+2202,James and the Giant Peach (1996),8|11|3
+2203,Back to the Future Part II (1989),14|4
+2204,Valerian and the City of a Thousand Planets (2017),0|1|14
+2205,The Girl Who Kicked the Hornet's Nest (2009),7|15
+2206,Rosemary's Baby (1968),7|10
+2207,Reality Bites (1994),7
+2208,Saboteur (1942),5
+2209,The Girl on the Bridge (1999),7|13
+2210,Krull (1983),8|0|1
+2211,Underworld (2003),8|0|10|13
+2212,The Lost Boys (1987),8|4
+2213,Amy (2015),7|11|6
+2214,"Me, Myself & Irene (2000)",4
+2215,Hidalgo (2004),0|7|16
+2216,The Hitcher (1986),0|15|10|5
+2217,Kubo and the Two Strings (2016),8|0|1
+2218,Star Trek: Insurrection (1998),0|1|14
+2219,Amadeus (1984),7|11
+2220,Dunston Checks In (1996),4
+2221,Swordfish (2001),0
+2222,The Bride of Frankenstein (1935),14|10
+2223,Top Hat (1935),11
+2224,Inside Llewyn Davis (2013),7|11
+2225,Jaws (1975),7|15
+2226,Final Destination 2 (2003),8|10
+2227,The Hurricane (1999),7
+2228,Made of Honor (2008),None
+2229,Pain & Gain (2013),0|7|5|4
+2230,Sicario (2015),0|7|15|5|12
+2231,Land of the Lost (2009),8|14
+2232,The Fighter (2010),7
+2233,Police Academy: Mission to Moscow (1994),5|4
+2234,Batman Beyond: Return of the Joker (2000),0|14
+2235,"Paris, Texas (1984)",7
+2236,The Player (1992),7|5
+2237,Moonstruck (1987),None
+2238,The Apartment (1960),7
+2239,Suspicion (1941),12
+2240,Buena Vista Social Club (1999),11|6
+2241,Jawbreaker (1999),5
+2242,Kingpin (1996),4
+2243,One Night at McCool's (2001),5|4
+2244,The Preacher's Wife (1996),8|7|11|13
+2245,Leaving Las Vegas (1995),7|13
+2246,Every Which Way But Loose (1978),0|4
+2247,A Lot Like Love (2005),7|13
+2248,Mr. Nice Guy (1997),0|4
+2249,A Nightmare on Elm Street (1984),10
+2250,Gone with the Wind (1939),7|16|13
+2251,Beverly Hills Cop III (1994),0|5|4
+2252,Mr. Nobody (2009),8|14|7|13
+2253,A Night at the Roxbury (1998),4
+2254,The Golden Child (1986),8|0
+2255,Dr. Dolittle (1998),8|4
+2256,The Brady Bunch Movie (1995),4
+2257,Divine Secrets of the Ya-Ya Sisterhood (2002),7|4
+2258,Ninja Scroll (1993),8|1
+2259,Pretty Woman (1990),None
+2260,The Sea Inside (2004),7
+2261,I Am Number Four (2011),0|15
+2262,"Legally Blonde 2: Red, White & Blonde (2003)",None
+2263,Ella Enchanted (2004),8|11
+2264,American Pie Presents The Naked Mile (2006),4
+2265,Zulu (1964),1|16
+2266,Angel-A (2005),7
+2267,Freaky Friday (2003),8|4|11
+2268,The Brothers Grimm (2005),8
+2269,Bronson (2008),7|5
+2270,Volver (2006),7|4
+2271,La Dolce Vita (1960),7|4
+2272,Arlington Road (1999),7|15|5|12
+2273,The Hunger (1983),10
+2274,Tora! Tora! Tora! (1970),16
+2275,Jude (1996),7|13
+2276,Road to Perdition (2002),7|5
+2277,Big Trouble in Little China (1986),8|0
+2278,Planet of the Apes (1968),14
+2279,Patton (1970),7|16
+2280,Elephant (2003),7|15
+2281,Jacob's Ladder (1990),7|15|16|10
+2282,The Vow (2012),7|13
+2283,Begin Again (2013),7|4|11|13
+2284,Summer Wars (2009),14
+2285,Snow Falling on Cedars (1999),7|13
+2286,Congo (1995),0|14|10
+2287,No Way Out (1987),0|5
+2288,National Lampoon's Senior Trip (1995),None
+2289,The Mission (1986),7
+2290,The Saint (1997),0|15|4|13
+2291,Entrapment (1999),0|7|5|13
+2292,Frost/Nixon (2008),7
+2293,Marnie (1964),7|15|12
+2294,Wild Hogs (2007),0
+2295,The Interpreter (2005),7|5|12
+2296,The Campaign (2012),4
+2297,Can't Buy Me Love (1987),7
+2298,Working Girl (1988),None
+2299,Movie 43 (2013),4
+2300,High School High (1996),None
+2301,For Your Eyes Only (1981),0|15
+2302,The Sisterhood of the Traveling Pants (2005),7
+2303,Scooby-Doo 2: Monsters Unleashed (2004),1|12
+2304,Forever Young (1992),8|14|7|4|13
+2305,Searching for Bobby Fischer (1993),7
+2306,Exorcist: The Beginning (2004),15|10
+2307,Planet 51 (2009),14
+2308,Blow (2001),7|5
+2309,Where the Heart Is (2000),7
+2310,Pirates of Silicon Valley (1999),7
+2311,Innerspace (1987),14|4
+2312,Death Wish 2 (1982),0|15|5
+2313,You Got Served (2004),7|11
+2314,Loser (2000),7
+2315,Stigmata (1999),10
+2316,The Thing (2011),14|10
+2317,Land of the Dead (2005),0|14|10
+2318,The Object of My Affection (1998),7
+2319,I Know What You Did Last Summer (1997),15|10
+2320,French Twist (1995),4
+2321,The Boondock Saints (1999),0|7
+2322,30 Minutes or Less (2011),5|4|12
+2323,The Professional (1981),0|7|15|12
+2324,The Running Man (1987),0|14
+2325,The Man with the Golden Gun (1974),0|1|15
+2326,Neon Genesis Evangelion: The End of Evangelion (1997),14
+2327,The Lake House (2006),8|14|7|13
+2328,The Purple Rose of Cairo (1985),8
+2329,"Hail, Caesar! (2016)",4|12
+2330,Buffalo '66 (1998),7|5
+2331,Blue Jasmine (2013),7
+2332,Dreamgirls (2006),7|11|13
+2333,Wild Wild West (1999),0|4|17
+2334,It Follows (2014),10
+2335,Wes Craven's New Nightmare (1994),10
+2336,Spawn (1997),8|0|1|10
+2337,The Adventures of Huck Finn (1993),1|7|3
+2338,Doom (2005),0|14|10
+2339,A Nightmare on Elm Street 2: Freddy's Revenge (1985),10
+2340,Modern Times (1936),None
+2341,Mrs. Miniver (1942),7|16|13
+2342,The Odessa File (1974),7
+2343,The Girl Next Door (2004),7
+2344,A Simple Plan (1998),7|5
+2345,The Fate of the Furious (2017),0|5
+2346,Hellraiser: Bloodline (1996),8|0|1|14|15|10
+2347,Faster Pussycat! Kill! Kill! (1965),7|5|4
+2348,Blues Brothers 2000 (1998),0|4|11
+2349,The Adventures of Robin Hood (1938),0|7
+2350,White Christmas (1954),11
+2351,Flatliners (1990),14|7|15|10
+2352,Indian Summer (1993),7|4
+2353,Jezebel (1938),7|13
+2354,Under Siege 2: Dark Territory (1995),0|15
+2355,Croupier (1998),7|5
+2356,The 7th Voyage of Sinbad (1958),8|1|3
+2357,Creepshow 2 (1987),14|10|4
+2358,Enter the Dragon (1973),0|15
+2359,The Alamo (2004),7|16|17
+2360,Tremors (1990),0|14|15|10|4
+2361,Gravity (2013),14|15
+2362,Frida (2002),7
+2363,Batman: Mask of the Phantasm (1993),0|14|12
+2364,The Naked Gun: From the Files of Police Squad! (1988),4
+2365,Snow Dogs (2002),4
+2366,Employee of the Month (2006),None
+2367,Bride Wars (2009),None
+2368,Mystery Men (1999),None
+2369,Gung Ho (1986),4
+2370,Tin Cup (1996),None
+2371,Allan Quatermain and the Lost City of Gold (1986),8|0|4
+2372,Dragonslayer (1981),8|1
+2373,Heat (1995),0|7|5
+2374,First Blood (1982),0|7|15|16
+2375,The Great Race (1965),0|11
+2376,The Nutty Professor (1996),14
+2377,Precious (2009),7
+2378,Spotlight (2015),7
+2379,The Bucket List (2007),7|4
+2380,Airplane II: The Sequel (1982),1|14
+2381,The Gods Must Be Crazy (1980),4|3
+2382,Hook (1991),8|0|4
+2383,Monty Python's The Meaning of Life (1983),4|11
+2384,Inferno (2016),7|15|5|12
+2385,The Ides of March (2011),7
+2386,Inglorious Bastards (1978),0|1|15|16|4
+2387,A Charlie Brown Christmas (1965),None
+2388,Attack the Block (2011),0|14|4
+2389,Slither (2006),14|10|4
+2390,That Thing You Do! (1996),7|11
+2391,Rollerball (1975),0|14
+2392,Mr. Right (2015),0
+2393,Mixed Nuts (1994),4
+2394,Jumper (2008),0|14|15
+2395,Saw III (2006),10|5
+2396,The Exorcist III (1990),10
+2397,Everybody Wants Some (2016),None
+2398,It Takes Two (1995),None
+2399,Next Friday (2000),4
+2400,The Fog (2005),10|12
+2401,Accepted (2006),4
+2402,Super (2010),4
+2403,Wind River (2017),15
+2404,Stick It (2006),7|4
+2405,Jeepers Creepers (2001),10
+2406,Jakob the Liar (1999),7|16|4
+2407,White Sands (1992),7|15|5
+2408,Big Momma's House (2000),4
+2409,Green Street Hooligans (2005),0|7|5
+2410,Ravenous (1999),10
+2411,Vanity Fair (2004),7
+2412,Grosse Pointe Blank (1997),0
+2413,The Castle (1997),None
+2414,Caddyshack II (1988),4
+2415,A Nightmare on Elm Street 3: Dream Warriors (1987),7|10
+2416,The Good Girl (2002),7|4
+2417,Inherent Vice (2014),7|5|4
+2418,Flash Gordon (1980),8|0|1|14|4
+2419,She's Having a Baby (1988),7
+2420,The Jackal (1997),0|7|5
+2421,Showtime (2002),0|5|4
+2422,Don Jon (2013),7
+2423,Joe Versus the Volcano (1990),7
+2424,Mad City (1997),7|15|5
+2425,High Plains Drifter (1973),17
+2426,Mighty Joe Young (1998),8|7
+2427,The Three Burials of Melquiades Estrada (2005),7|17
+2428,The X-Files: I Want to Believe (2008),0|14|7|15
+2429,Mary and Max (2009),None
+2430,[REC]² (2009),10
+2431,"Food, Inc. (2008)",6
+2432,The Happening (2008),14|7|10
+2433,200 Cigarettes (1999),7|4
+2434,Wayne's World 2 (1993),4
+2435,Lupin III: The Castle Of Cagliostro (1979),4|2
+2436,The Untouchables (1987),0|7
+2437,This Boy's Life (1993),7
+2438,Open Water (2003),7|10
+2439,"Oh, God! (1977)",8|4
+2440,"Mr. Death: The Rise and Fall of Fred A. Leuchter, Jr. (1999)",7|6
+2441,The Mighty Ducks (1992),4
+2442,From Hell (2001),10|12
+2443,True Grit (1969),7|17
+2444,Along Came Polly (2004),None
+2445,The Strangers (2008),10
+2446,Show Me Love (1998),7|4
+2447,Fast Times at Ridgemont High (1982),7|4
+2448,Lilo & Stitch (2002),14|4|11
+2449,But I'm a Cheerleader (1999),7
+2450,RV (2006),4
+2451,Flags of Our Fathers (2006),0|7|16
+2452,Jack the Giant Slayer (2013),8
+2453,An Officer and a Gentleman (1982),7|13
+2454,The Duchess (2008),7|13
+2455,Block Party (2005),4|11|6
+2456,Rudy (1993),7
+2457,Loaded Weapon 1 (1993),None
+2458,Michael Clayton (2007),7|15|12
+2459,In the Heat of the Night (1967),7|5|12
+2460,Mr. Bean's Holiday (2007),4
+2461,Titan A.E. (2000),0|1|14
+2462,Force 10 from Navarone (1978),0|1|16
+2463,Ghost Dad (1990),8|4
+2464,Apocalypto (2006),7
+2465,You Don't Mess with the Zohan (2008),0
+2466,Iron Eagle IV (1995),0|15
+2467,The Prophecy (1995),8|15|10|12
+2468,Tank Girl (1995),0|14
+2469,Syriana (2005),7
+2470,Weird Science (1985),8|0|14
+2471,Osmosis Jones (2001),0|4|3
+2472,Kazaam (1996),8|4
+2473,Major League II (1994),4
+2474,The Benchwarmers (2007),4
+2475,For Love of the Game (1999),7|13
+2476,Ride Along 2 (2016),0|4
+2477,Rumor Has It... (2005),None
+2478,Terms of Endearment (1983),7
+2479,Me and You and Everyone We Know (2006),None
+2480,Twelfth Night (1996),7
+2481,Evangelion: 2.0 You Can (2009),14
+2482,First Daughter (2004),7
+2483,Dinner for Schmucks (2010),4
+2484,xXx (2002),0|15
+2485,Music and Lyrics (2007),11
+2486,Death Race (2008),0|15
+2487,When We Were Kings (1996),6
+2488,Mad Max Beyond Thunderdome (1985),0
+2489,Miss Congeniality (2000),5|4
+2490,In & Out (1997),None
+2491,Beethoven's 2nd (1993),4
+2492,The 'burbs (1989),1|10|12
+2493,Cold Mountain (2003),7|16|13
+2494,Man Bites Dog (1992),None
+2495,Bonnie and Clyde (1967),0|7|5
+2496,Pandorum (2009),0|1|14|10
+2497,Dunkirk (2017),7|16
+2498,Zathura (2005),8|0|1|14|3
+2499,Once Upon a Time in Mexico (2003),0|15|5
+2500,Cube (1997),14|10
+2501,Dead Alive (1992),None
+2502,For a Few Dollars More (1965),17
+2503,Suspiria (1977),10
+2504,Gandhi (1982),7
+2505,Water for Elephants (2011),7|13
+2506,Ghosts of Mars (2001),0|1|14|10
+2507,Beverly Hills Chihuahua (2008),4|3
+2508,Bully (2001),7|5
+2509,Fever Pitch (2005),7
+2510,40 Days and 40 Nights (2002),7
+2511,Airport '77 (1977),0|7
+2512,Nick of Time (1995),5|12
+2513,The Omega Man (1971),0|14|7|10
+2514,The War of the Roses (1989),7|4
+2515,Bicycle Thieves (1948),7
+2516,What If (2013),4
+2517,Spellbound (2002),6
+2518,Rocky Balboa (2006),0|7
+2519,Mean Streets (1973),7|5
+2520,Fly Away Home (1996),7
+2521,Jaws 3-D (1983),1|15|10
+2522,The Animatrix (2003),14
+2523,The Flintstones in Viva Rock Vegas (2000),8
+2524,Scream 3 (2000),10|12
+2525,Catfish (2010),6
+2526,Pokémon 3: The Movie (2000),None
+2527,Cowboy Bebop: The Movie (2001),0|14|17
+2528,Jimmy Neutron: Boy Genius (2001),14
+2529,The Great Escape (1963),7|16
+2530,Bonfire of the Vanities (1990),7|4
+2531,Gamer (2009),0|14|15
+2532,Revolver (2005),7|5
+2533,Mulholland Drive (2001),7|12
+2534,In the Heart of the Sea (2015),0|7
+2535,13 Hours (2016),0|7|15|16
+2536,The Getaway (1994),0|7|15|5
+2537,Doubt (2008),7
+2538,The Pelican Brief (1993),7|5
+2539,Fatal Instinct (1993),5|4
+2540,The Thing from Another World (1951),14|10
+2541,Nerve (2016),0|1|15|12
+2542,Kicking & Screaming (2005),4
+2543,Red 2 (2013),0|5|4
+2544,Once Upon a Time in the West (1968),0|7
+2545,Once Upon a Time in America (1984),7|5
+2546,The Pink Panther (2006),4|12
+2547,The Hudsucker Proxy (1994),7|4
+2548,*batteries not included (1987),8|14|4|3
+2549,Fantasia 2000 (1999),8|11
+2550,Highlander III: The Sorcerer (1994),8|0|1|14
+2551,The Cannonball Run (1981),0|4
+2552,Dope (2015),7|5
+2553,Hot Rod (2007),0|4
+2554,Ghost in the Shell 2: Innocence (2004),14
+2555,Thirteen (2003),7
+2556,Philadelphia (1993),7
+2557,Get Shorty (1995),4
+2558,A Time to Kill (1996),7|15|5
+2559,The Informant! (2009),7|5|4
+2560,The Big Year (2011),4
+2561,Tales from the Crypt Presents: Demon Knight (1995),10
+2562,Candyman (1992),15|10
+2563,Black Snake Moan (2007),7|11
+2564,G.I. Joe: Retaliation (2013),0|14|15
+2565,While You Were Fighting: A Thor Mockumentary (2016),None
+2566,Stripes (1981),16
+2567,Roger & Me (1989),6
+2568,Who Killed the Electric Car? (2006),6
+2569,Shut Up & Sing (2006),6
+2570,Shane (1953),7|17|13
+2571,The Equalizer (2014),0|15|5
+2572,Pale Rider (1985),17
+2573,High Noon (1952),17
+2574,State of Play (2009),7
+2575,Mud (2012),7
+2576,Here Comes the Boom (2012),7|4
+2577,In America (2002),7
+2578,Sphere (1998),1|14|12
+2579,Arthur (2011),None
+2580,Pirate Radio (2009),4
+2581,Lady in the Water (2006),8|7|15|10|12
+2582,Godzilla (1998),0|14|10
+2583,Thirst (2009),14|7|10
+2584,A Love Song for Bobby Long (2004),7
+2585,El Mariachi (1992),0|7|15|5
+2586,The Omen (2006),7|10
+2587,Lost Horizon (1937),8|14|7
+2588,Ernest Goes to Camp (1987),3
+2589,Inland Empire (2006),7|15|12
+2590,The Legend of 1900 (1998),7|4|13
+2591,The Family Stone (2005),7
+2592,Taxi 2 (2000),0|15|4
+2593,Revenge of the Nerds (1984),4
+2594,No Man's Land (2001),7|16|4
+2595,Balto (1995),1|7|2
+2596,Unknown (2011),0|7|12
+2597,The Babadook (2014),7|10
+2598,Holy Man (1998),7|4
+2599,F/X (1986),0|15|5
+2600,First Strike (1996),1|5|4
+2601,Rambo: First Blood Part II (1985),0|7|15
+2602,Andre (1994),7|3
+2603,Goon (2011),7|4
+2604,Eight Legged Freaks (2002),14|4
+2605,Romancing the Stone (1984),13
+2606,The Game (1997),0|7|15|12|9
+2607,Tequila Sunrise (1988),0|5|13
+2608,Phone Booth (2002),0|12
+2609,Nosferatu (1922),7|10
+2610,Under Siege (1992),0|15
+2611,8MM (1999),7|15|5|12
+2612,The Scorpion King (2002),8
+2613,The Fisher King (1991),8|7|4
+2614,Speed Racer (2008),0|4
+2615,Michael Collins (1996),7|16
+2616,Animal House (1978),4
+2617,Green Zone (2010),0|7|15|16
+2618,City Slickers II: The Legend of Curly's Gold (1994),4|17
+2619,Bio-Dome (1996),None
+2620,Chitty Chitty Bang Bang (1968),8|4|11|3
+2621,Shall We Dance? (1996),7|4
+2622,The Blair Witch Project (1999),10|12
+2623,The Medallion (2003),8|0|4
+2624,Love and Other Drugs (2010),7
+2625,Get Carter (2000),0|7|15
+2626,Let's Go to Prison (2006),None
+2627,How to Make an American Quilt (1995),7|13
+2628,Friday the 13th Part 2 (1981),10
+2629,The Basketball Diaries (1995),7|5
+2630,Dazed and Confused (1993),7|4
+2631,Outbreak (1995),7|15
+2632,Dawn of the Dead (1978),0|14|10
+2633,The Orphanage (2007),7|10
+2634,Close Encounters of the Third Kind (1977),1|14|7
+2635,American Me (1992),7|5
+2636,Men of Honor (2000),7
+2637,The Man Without a Past (2002),7|4
+2638,The Brave Little Toaster (1987),8|11
+2639,Batman & Robin (1997),0|14
+2640,Holiday (1938),7
+2641,Stalag 17 (1953),7|16|4
+2642,Network (1976),14|7
+2643,Sunset Blvd. (1950),7|9
+2644,The Wild Bunch (1969),17
+2645,Les Misérables (1995),7
+2646,Damien: Omen II (1978),10|12
+2647,Re-Animator (1985),14
+2648,Remember the Titans (2000),7
+2649,Beasts of the Southern Wild (2012),8|7
+2650,That Awkward Moment (2014),4|13
+2651,Creed (2015),7
+2652,Nighthawks (1981),0|15|5
+2653,Mary Shelley's Frankenstein (1994),14|7|10|13
+2654,Hercules (1997),8|11|3
+2655,Parenthood (1989),4
+2656,Dennis the Menace (1993),4
+2657,The Hills Have Eyes (2006),8|10
+2658,Fire Down Below (1997),0|15|5
+2659,What Dreams May Come (1998),8|7|13
+2660,The Ref (1994),7|5|4
+2661,Ju-on: The Grudge (2002),10
+2662,The Age of Innocence (1993),7|13
+2663,Futurama: Bender's Game (2008),8|14|4
+2664,Star Wars: The Clone Wars (2008),0|1|14
+2665,Hero (2002),8|0|7
+2666,Ferngully: The Last Rainforest (1992),8|3
+2667,October Sky (1999),7|3
+2668,Man on the Moon (1999),4
+2669,The Lookout (2007),7
+2670,Robin Hood (2010),0|1|7
+2671,The Horse Whisperer (1998),7
+2672,"Corrina, Corrina (1994)",4|3|13
+2673,Lilies of the Field (1963),7|4
+2674,Raging Bull (1980),7
+2675,The Piano (1993),7
+2676,Child's Play (1988),10|12
+2677,Howard the Duck (1986),0|4
+2678,Cobra (1986),0|15|10|5
+2679,Down with Love (2003),None
+2680,Lars and the Real Girl (2007),7|4
+2681,Bad Company (2002),0|4
+2682,The Toxic Avenger (1984),0|14|4
+2683,Domino (2005),0|7
+2684,Commando (1985),0|15|16
+2685,Fracture (2007),None
+2686,Two Weeks Notice (2002),None
+2687,Rocky V (1990),0|7
+2688,Miami Vice (2006),0|7|5
+2689,The Rescuers Down Under (1990),8|5
+2690,Cinderella (1950),8|11|13
+2691,Pan (2015),8|1|3
+2692,Batman: Under the Red Hood (2010),None
+2693,Darkman (1990),0|14|7|10
+2694,Cliffhanger (1993),0|15
+2695,Annihilation (2018),0|14|7|15|10
+2696,How to Deal (2003),7
+2697,Trading Places (1983),4
+2698,Where the Buffalo Roam (1980),4
+2699,The Truth About Cats & Dogs (1996),None
+2700,The Diving Bell and the Butterfly (2007),7
+2701,Farinelli: il castrato (1994),7
+2702,The Celebration (1998),7
+2703,Delicatessen (1991),8|4
+2704,Conan the Destroyer (1984),8|0
+2705,Pink Flamingos (1972),7|10|5|4
+2706,Locke (2013),7
+2707,Predestination (2014),14|7|15
+2708,Life (1999),7
+2709,The American President (1995),7
+2710,Newsies (1992),11|3
+2711,Beyond the Poseidon Adventure (1979),0|15
+2712,Maid in Manhattan (2002),None
+2713,Sahara (2005),0
+2714,Fried Green Tomatoes (1991),7|4|12
+2715,The Dreamers (2003),7|13
+2716,Clue (1985),5|12
+2717,Friday the 13th Part IV: The Final Chapter (1984),10
+2718,Teen Wolf (1985),8|4
+2719,Cashback (2004),7
+2720,Manhunter (1986),7|15|10|5|12
+2721,House of Wax (1953),10
+2722,Miss Congeniality 2: Armed and Fabulous (2005),5|4
+2723,Dying Young (1991),7|13
+2724,A Walk on the Moon (1999),4|13
+2725,Seven Brides for Seven Brothers (1954),11
+2726,Joyeux Noël (2005),7|16
+2727,Stir Crazy (1980),None
+2728,Diabolique (1954),7|15|9
+2729,Brigadoon (1954),8|11|13
+2730,The New World (2005),7|13
+2731,Firestarter (1984),0|14|15|10
+2732,My Left Foot (1989),7
+2733,Deliverance (1972),7|15
+2734,The Nut Job (2013),1|4|3
+2735,The Hot Chick (2002),8
+2736,Assassins (1995),0|15|5
+2737,Sunshine (2007),1|14
+2738,Bicentennial Man (1999),14|7|3
+2739,Crocodile Dundee (1986),4
+2740,City of Ember (2008),8|1|14|3
+2741,Monster's Ball (2001),7|13
+2742,Hansel & Gretel: Witch Hunters (2013),8|0
+2743,The Bourne Identity (1988),0|15|12
+2744,Closer (2004),7|13
+2745,Pride and Prejudice (1995),None
+2746,The Addams Family (1991),10|4
+2747,Crazy Heart (2009),7|11
+2748,Broken Arrow (1996),0|15
+2749,Highlander II: The Quickening (1991),8|0|14
+2750,Only the Lonely (1991),5
+2751,Breaking Away (1979),7|4
+2752,Return from Witch Mountain (1978),8|14|12|3
+2753,Never Say Never Again (1983),0
+2754,The Wedding Date (2005),None
+2755,All the President's Men (1976),7|5
+2756,Head Over Heels (2001),12
+2757,Legion (2010),8|0|15|10
+2758,Alien: Covenant (2017),0|14|10
+2759,I Origins (2014),14|7
+2760,Bananas (1971),None
+2761,M*A*S*H (1970),7|16
+2762,Vertical Limit (2000),0|15
+2763,Wonder Boys (2000),7|4
+2764,The Outlaw Josey Wales (1976),17
+2765,The Bodyguard (1992),7|15|5|13
+2766,The Living Daylights (1987),0|15
+2767,A Man for All Seasons (1966),7
+2768,Swimming Pool (2003),7|15
+2769,Disturbia (2007),7|15
+2770,Flubber (1997),8|14|4
+2771,Marked for Death (1990),0|15
+2772,Sexy Beast (2000),7|5
+2773,Dead Ringers (1988),7|15|10
+2774,Showgirls (1995),7|11
+2775,Visitor Q (2001),None
+2776,For Richer or Poorer (1997),4
+2777,Envy (2004),4
+2778,Nixon (1995),7
+2779,Wasabi (2001),None
+2780,Amistad (1997),7
+2781,Colombiana (2011),0|7
+2782,Boys Don't Cry (1999),7|13
+2783,In Her Shoes (2005),7
+2784,Snake Eyes (1998),7|5|12
+2785,47 Ronin (2013),8|0|1|7
+2786,A Hard Day's Night (1964),4|11
+2787,An American Werewolf in Paris (1997),4
+2788,Alive (1993),0|7
+2789,The Mummy (1932),8|10
+2790,Undercover Brother (2002),4
+2791,Children of a Lesser God (1986),7|13
+2792,Children of the Corn IV: The Gathering (1996),10
+2793,The Sure Thing (1985),None
+2794,Before Sunset (2004),7|13
+2795,Encino Man (1992),8|4
+2796,Hardball (2001),7
+2797,My Blue Heaven (1990),4
+2798,Cellular (2004),0|5
+2799,Suicide Kings (1997),7|12
+2800,Tootsie (1982),None
+2801,How to Be Single (2016),None
+2802,Cursed (2005),None
+2803,Boogie Nights (1997),7
+2804,Desperately Seeking Susan (1985),7|12
+2805,Jersey Girl (2004),None
+2806,Get Over It (2001),11
+2807,Gosford Park (2001),7|5|4|12
+2808,The Million Dollar Hotel (2000),5
+2809,Ghosts of Girlfriends Past (2009),8
+2810,Poseidon (2006),0|7
+2811,Demolition (2015),7|4
+2812,Snatch (2000),None
+2813,The King of Comedy (1982),7|5|4
+2814,Letters to Juliet (2010),7
+2815,Demolition Man (1993),0|14
+2816,Hitchcock (2012),7
+2817,Nights of Cabiria (1957),7
+2818,Inside Job (2010),6
+2819,The Devil's Rejects (2005),10
+2820,Confessions of a Teenage Drama Queen (2004),4|11|3
+2821,The Guard (2011),0|7|4
+2822,I'm Gonna Git You Sucka (1988),0
+2823,Sidewalls (2011),7|4
+2824,Assault on Precinct 13 (2005),0|15|5
+2825,Barbershop 2: Back in Business (2004),4
+2826,Dragon: The Bruce Lee Story (1993),0|7
+2827,Dorian Gray (2009),8|7|10
+2828,Peggy Sue Got Married (1986),8|14|7
+2829,Friends with Money (2006),7
+2830,Oliver Twist (2005),7
+2831,Waiting for Guffman (1997),4
+2832,Lord of the Flies (1963),1|14|7|15
+2833,Inkheart (2008),8
+2834,The Muppets Take Manhattan (1984),4|11|3
+2835,Crocodile Dundee in Los Angeles (2001),7|4
+2836,The Postman (1997),0|14|7|13
+2837,Death Proof (2007),15
+2838,A Guy Thing (2003),None
+2839,The NeverEnding Story III (1994),8|3
+2840,Glengarry Glen Ross (1992),7|5
+2841,Now and Then (1995),7|4
+2842,Spanglish (2004),7
+2843,Death at a Funeral (2007),4
+2844,The Tuxedo (2002),8|0|4
+2845,Stop! Or My Mom Will Shoot (1992),0|4
+2846,John Q (2002),7|5
+2847,The Blob (1988),14|10
+2848,The Amityville Horror (2005),10
+2849,The Break-Up (2006),7
+2850,City Slickers (1991),4|17
+2851,Letters from Iwo Jima (2006),7|16
+2852,We Bought a Zoo (2011),7
+2853,The Garden of the Finzi-Continis (1970),7
+2854,8 ½ Women (1999),7|4
+2855,The Adventures of Pluto Nash (2002),0|1|14|4
+2856,The Magnificent Seven (2016),0|5|17
+2857,Boys and Girls (2000),None
+2858,Highlander: Endgame (2000),8|0|1
+2859,On Her Majesty's Secret Service (1969),0
+2860,My Own Private Idaho (1991),7
+2861,G.I. Jane (1997),0|7|16
+2862,Donnie Brasco (1997),7|5
+2863,Broadcast News (1987),7
+2864,The Phantom (1996),8|0
+2865,Evita (1996),7|11
+2866,Eye of the Beholder (1999),7|15|12
+2867,The Great Beauty (2013),7|4
+2868,Rush Hour 3 (2007),0
+2869,Last Action Hero (1993),8|0|4
+2870,Aladdin and the King of Thieves (1996),None
+2871,Not Another Teen Movie (2001),None
+2872,Tron (1982),0|1|14
+2873,Ghost World (2001),7|4
+2874,Bug (2006),7|15|10
+2875,The Blue Lagoon (1980),7|13
+2876,Broken Flowers (2005),7|4
+2877,In the Name of the Father (1993),7
+2878,Man on the Train (2002),7|15|5|4
+2879,Grumpier Old Men (1995),None
+2880,A Bronx Tale (1993),7|5
+2881,Adam's Rib (1949),None
+2882,Wild Tales (2014),7|15|4
+2883,Waitress (2007),7
+2884,Barb Wire (1996),0|14
+2885,The Opposite of Sex (1998),None
+2886,Waterworld (1995),0|14
+2887,The Place Beyond the Pines (2012),7|5
+2888,Elite Squad (2007),7|5
+2889,A Christmas Carol (1938),8|7
+2890,Wall Street: Money Never Sleeps (2010),7
+2891,Pink Floyd: The Wall (1982),7|11
+2892,The Science of Sleep (2006),8|7|4|13
+2893,Down to You (2000),None
+2894,Cape Fear (1991),7|15|10|5
+2895,The Maltese Falcon (1941),5|12|9
+2896,Flipper (1996),1
+2897,Willard (2003),7|10
+2898,The Doors (1991),7|11
+2899,Baadasssss! (2003),7
+2900,Flirting With Disaster (1996),4
+2901,Ladybugs (1992),4
+2902,Over the Top (1987),0|7
+2903,Better Off Dead... (1985),None
+2904,Mr. & Mrs. Smith (1941),None
+2905,The Lady Eve (1941),5
+2906,Cheech and Chong's Up in Smoke (1978),4
+2907,To Die For (1995),7|5
+2908,"Good Night, and Good Luck. (2005)",7
+2909,Set It Off (1996),0|7|15
+2910,Money Talks (1997),0|5|4
+2911,Hall Pass (2011),None
+2912,A Boy and His Dog (1975),14|10
+2913,The Four Musketeers (1974),0|1|4
+2914,Free Willy 2: The Adventure Home (1995),1|7
+2915,Thirteen Days (2000),7|16
+2916,Waking Ned Devine (1998),4
+2917,The Pledge (2001),7|5|12
+2918,"Good bye, Lenin! (2003)",7|4
+2919,The Rainmaker (1997),7|5
+2920,The Insider (1999),7|15
+2921,Yojimbo (1961),7
+2922,Fierce Creatures (1997),4
+2923,Tom and Huck (1995),1
+2924,Secret Window (2004),7|15|10|12
+2925,Jet Li's Fearless (2006),0|7
+2926,The Importance of Being Earnest (2002),None
+2927,Smokey and the Bandit (1977),0|1|4
+2928,Road Trip (2000),4
+2929,Ali G Indahouse (2002),4
+2930,Black Beauty (1994),0|1|7|3
+2931,The Bad News Bears (1976),4
+2932,Blue Velvet (1986),7|15|5|12
+2933,Children of the Corn (1984),10
+2934,The Mod Squad (1999),0|15|5|12
+2935,The Triplets of Belleville (2003),None
+2936,The Doom Generation (1995),0|7|5|4
+2937,Dog Day Afternoon (1975),7|15|5
+2938,Striptease (1996),7
+2939,Persuasion (2007),7
+2940,The Frighteners (1996),10|4
+2941,Pollock (2000),None
+2942,The X-Files: Fight the Future (1998),0|14|7|12
+2943,Last Knights (2015),8|0|7
+2944,Predators (2010),0|14|10
+2945,Monkeybone (2001),8|4
+2946,The Craft (1996),8|10
+2947,Evangelion: 1.0 You Are (2007),14|7
+2948,Mr. Holland's Opus (1995),7|11
+2949,Match Point (2005),7|5|13
+2950,Pay It Forward (2000),7
+2951,15 Minutes (2001),0|7|15|5
+2952,Darkest Hour (2017),7|16
+2953,Frantic (1988),0|15|5|12
+2954,Ninja Assassin (2009),0|7|15
+2955,A Single Man (2009),7
+2956,A Mighty Wind (2003),4
+2957,The General (1926),16
+2958,Meet the Spartans (2008),4
+2959,The Station Agent (2003),7|4
+2960,Homeward Bound: The Incredible Journey (1993),1
+2961,Presumed Innocent (1990),7|5|12
+2962,Bird on a Wire (1990),0|5
+2963,Half Baked (1998),5|4
+2964,The Greatest Game Ever Played (2005),7
+2965,Cop Land (1997),7|5
+2966,Memphis Belle (1990),0|7|16
+2967,Lockout (2012),0|14
+2968,Reversal of Fortune (1990),7|12
+2969,Dogville (2003),7
+2970,Looking for Richard (1996),7|6
+2971,Naked Lunch (1991),14|7
+2972,Woman on Top (2000),None
+2973,Misery (1990),7|15|10
+2974,Proof (2005),7
+2975,George of the Jungle (1997),0|4
+2976,Friday (1995),7|4
+2977,Charade (1963),12
+2978,The Secret Garden (1993),8|7
+2979,Temple Grandin (2010),7
+2980,Tom Jones (1963),1|7|4
+2981,I Shot Andy Warhol (1996),7|5
+2982,Don't Tell Mom the Babysitter's Dead (1991),4
+2983,Memories of Murder (2003),7|12
+2984,The Conversation (1974),7|15|5|12
+2985,The Juror (1996),7|15|5|13
+2986,The Guardian (2006),0|1|7
+2987,21 Grams (2003),7|5
+2988,Stir of Echoes (1999),8|10
+2989,The Hunt (2012),7
+2990,Along Came a Spider (2001),5
+2991,My Man Godfrey (1936),None
+2992,It Happened One Night (1934),None
+2993,The Big Sleep (1946),7|5|9
+2994,The Outsiders (1983),7
+2995,The Lobster (2015),14
+2996,Hedwig and the Angry Inch (2001),7|11
+2997,Crash (1996),7
+2998,Burnt by the Sun (1994),7|16
+2999,The Cat Returns (2002),8|7|3
+3000,Conspiracy Theory (1997),0|7|15|5
+3001,The Corruptor (1999),0|7|15|5
+3002,Priest (2011),8|15
+3003,Lost and Delirious (2001),7|13
+3004,Starman (1984),14|7|13
+3005,The Umbrellas of Cherbourg (1964),7|11|13
+3006,Akeelah and the Bee (2006),7
+3007,I.Q. (1994),None
+3008,Heartbreakers (2001),4
+3009,The Time Machine (1960),14
+3010,Tommy Boy (1995),None
+3011,Annie (1982),11|3
+3012,Enchanted April (1992),7|11
+3013,Drinking Buddies (2013),7
+3014,Life Is Beautiful (1997),7|4
+3015,Eight Below (2006),1|7
+3016,Turbo Kid (2014),None
+3017,The Kite Runner (2007),7
+3018,10 Items or Less (2006),4
+3019,Three Colors: Blue (1993),7
+3020,Eye for an Eye (1996),7|5
+3021,The Last Days of Disco (1998),7|4
+3022,Little Women (1994),7|4|13
+3023,Charlie Wilson's War (2007),7
+3024,The Great Raid (2005),7|16
+3025,A Serious Man (2009),7
+3026,Calendar Girls (2003),7|4
+3027,Rumble in the Bronx (1995),0|4
+3028,Darkness Falls (2003),10
+3029,The Best Offer (2013),7|5|13
+3030,Lone Star (1996),7|5|12|17|13
+3031,Real Genius (1985),14
+3032,The Skulls (2000),0|7|15
+3033,The Secret in Their Eyes (2009),7|15|5|13
