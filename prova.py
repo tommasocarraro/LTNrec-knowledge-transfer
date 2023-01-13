@@ -259,7 +259,7 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                            "ml(movies)|mr(genres)": "mlMoviesUNIONmrGenres"}
 
     # create datasets and save them
-    Parallel(n_jobs=num_workers)(delayed(create_datasets)(mode_dict[mode], [training_folds_dict[fold for fold in training_folds], seed, n_neg, wandb_project,
+    Parallel(n_jobs=num_workers)(delayed(create_datasets)(mode_dict[mode], [training_folds_dict[fold] for fold in training_folds], seed, n_neg, wandb_project,
                                                           local_dataset_path_prefix, proportions_to_keep)
                                  for mode in evaluation_modes
                                  for seed in range(starting_seed, starting_seed + n_runs))
