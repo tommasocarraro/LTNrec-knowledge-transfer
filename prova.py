@@ -174,8 +174,7 @@ def create_datasets(mode, training_folds, seed, n_neg, wandb_project, local_path
                                         wandb_project, p, seed)
 
 
-def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
-                   local_result_path_prefix, evaluation_modes=eval_modes, training_folds=tr_folds, n_neg=200,
+def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr_folds, n_neg=200,
                    models=available_models, exp_name="experiment", proportions_to_keep=(1, ), starting_seed=0, n_runs=30,
                    num_workers=os.cpu_count()):
     """
@@ -221,21 +220,26 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
                                                                  "the following tuple of " \
                                                                  "models: %s" % (" ".join(models), )
 
+    local_dataset_path_prefix = "./%s/datasets" % (wandb_project, )
+    local_config_path_prefix = "./%s/configs" % (wandb_project, )
+    local_model_path_prefix = "./%s/models" % (wandb_project, )
+    local_result_path_prefix = "./%s/results" % (wandb_project, )
+
     # create folder to store datasets if it does not already exist
     if not os.path.exists(local_dataset_path_prefix):
-        os.mkdir(local_dataset_path_prefix)
+        os.makedirs(local_dataset_path_prefix)
 
     # create folder to store configurations if it does not already exist
     if not os.path.exists(local_config_path_prefix):
-        os.mkdir(local_config_path_prefix)
+        os.makedirs(local_config_path_prefix)
 
     # create folder to store models if it does not already exist
     if not os.path.exists(local_model_path_prefix):
-        os.mkdir(local_model_path_prefix)
+        os.makedirs(local_model_path_prefix)
 
     # create folder to store results if it does not already exist
     if not os.path.exists(local_result_path_prefix):
-        os.mkdir(local_result_path_prefix)
+        os.makedirs(local_result_path_prefix)
 
     # create list of models
     models_list = []
@@ -325,13 +329,9 @@ def run_experiment(wandb_project, local_dataset_path_prefix, local_config_path_p
 
 if __name__ == '__main__':
     run_experiment(wandb_project='prova',
-                   local_dataset_path_prefix="./datasets/cold-start",
-                   local_config_path_prefix="./config/best_config/cold-start",
-                   local_model_path_prefix="./saved_models/cold-start",
-                   local_result_path_prefix="./results/cold-start",
                    evaluation_modes="ml\mr",
-                   training_folds=("ml", "ml(movies)|mr(genres)"),  # , "ml(movies)|mr(genres)"
-                   # models=("standard_mf"),
+                   training_folds="ml",  # , "ml(movies)|mr(genres)"
+                   models="standard_mf",
                    # proportions_to_keep=(0.05, ),  # 1, 0.5, 0.2, 0.1, 0.05
                    starting_seed=0, n_runs=1)
     # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
