@@ -259,8 +259,8 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                                           local_dataset_path_prefix, proportions_to_keep)
                                  for mode in evaluation_modes
                                  for seed in range(starting_seed, starting_seed + n_runs))
-    #
-    # # run grid search of each model on each dataset with seed 0 and proportion 1
+
+    # run grid search of each model on each dataset with seed 0 and proportion 1
     Parallel(n_jobs=num_workers)(delayed(grid_search)(model,
                                                       "%s-%s-%d-%.2f-seed_%d" % (mode, dataset_name, n_neg, p, starting_seed),
                                                       local_dataset_path_prefix,
@@ -273,7 +273,7 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                  if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
                                                                                      starting_seed)))
     # # #
-    # # # upload best model configs as wandb artifacts
+    # upload best model configs as wandb artifacts
     # upload_best_configs(local_config_path_prefix, wandb_project)
     # # #
     # # train every model on every dataset with every seed with best configuration files obtained
@@ -329,11 +329,11 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
 
 if __name__ == '__main__':
     run_experiment(wandb_project='prova',
-                   # evaluation_modes="ml\mr",
-                   # training_folds="ml",  # , "ml(movies)|mr(genres)"
-                   # models="standard_mf",
+                   evaluation_modes="ml\mr",
+                   training_folds="ml",  # , "ml(movies)|mr(genres)"
+                   models="standard_mf",
                    # proportions_to_keep=(0.05, ),  # 1, 0.5, 0.2, 0.1, 0.05
-                   starting_seed=0, n_runs=30)
+                   starting_seed=0, n_runs=1)
     # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
     # todo applicare un metodo tipo optuna o wandb e verificare se ci sono parametri migliori
     # todo forse bisognerebbe usare il logger per fare in modo che le cose vengano loggate correttamente anche su wandb
@@ -342,4 +342,5 @@ if __name__ == '__main__':
     # todo forse ha senso scaricare l'artefatto solo se non e' gia' presente sulla folder. si puo' fare una funzione adibita a questo
     # TODO c'e' un errore semplicemente sulla fase di test per alcuni modelli, non carica il JSON -> devo eliminare i mancanti
     # todo rilanciare gli esperimenti vecchi con il bug risolto
+    # todo fare anche il test con iper-parametri fissati per i modelli, provare con un numero variabile di fattori latenti
     # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si

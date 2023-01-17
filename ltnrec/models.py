@@ -435,7 +435,7 @@ class Model:
             # set seed for reproducible experiments
             # todo qua non ha senso il seed, tanto non funziona sugli sweep, e non ha senso riprodurre la grid search
             # todo il problema e' sulla riproducibilita' degli esperimenti in parallelo, si setta un seed globale, quindi non so come funzioni
-            # set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
+            set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
             # run the wandb agent that will perform the sweep
             wandb.agent(sweep_id, function=single_run, count=self.param_config["search_n_iter"])
 
