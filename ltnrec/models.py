@@ -21,25 +21,27 @@ class MatrixFactorization(torch.nn.Module):
     The model has inside two matrices: one containing the embeddings of the users of the system, one containing the
     embeddings of the items of the system.
     """
-    def __init__(self, n_users, n_items, n_factors, biased=False):
+    def __init__(self, n_users, n_items, n_factors, biased=False, weight_initializer=torch.nn.init.xavier_normal_):
         """
         Construction of the matrix factorization model.
         :param n_users: number of users in the dataset
         :param n_items: number of items in the dataset
         :param n_factors: size of embeddings for users and items
         :param biased: whether the MF model must include user and item biases or not, default to False
+        :param weight_initializer: method used to initialize the weights of the Matrix Factorization model. It has to be
+        in the torch.nn.init module.
         """
         super(MatrixFactorization, self).__init__()
         self.u_emb = torch.nn.Embedding(n_users, n_factors)
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
-        torch.nn.init.xavier_normal_(self.u_emb.weight)
-        torch.nn.init.xavier_normal_(self.i_emb.weight)
+        weight_initializer(self.u_emb.weight)
+        weight_initializer(self.i_emb.weight)
         self.biased = biased
         if biased:
             self.u_bias = torch.nn.Embedding(n_users, 1)
             self.i_bias = torch.nn.Embedding(n_items, 1)
-            torch.nn.init.normal_(self.u_bias.weight)
-            torch.nn.init.normal_(self.i_bias.weight)
+            weight_initializer(self.u_bias.weight)
+            weight_initializer(self.i_bias.weight)
         self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, u_idx, i_idx, dim=1, normalize=False):
