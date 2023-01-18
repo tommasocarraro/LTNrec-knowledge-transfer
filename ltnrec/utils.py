@@ -116,7 +116,7 @@ def append_to_result_file(file_name, experiment_name, result, seed):
         json.dump(data, outfile, indent=4)
 
 
-def create_report_json(local_result_path_prefix, json_file_name="experiment"):
+def create_report_json(local_result_path_prefix, save_path, json_file_name="experiment-results"):
     # create dictionary containing the results
     result_dict = {}
     # iterate over created result files
@@ -157,7 +157,7 @@ def create_report_json(local_result_path_prefix, json_file_name="experiment"):
                         np.std(result_dict[evaluation_mode][training_fold][model][metric]))
 
     # create JSON file with the result
-    with open(os.path.join(local_result_path_prefix, json_file_name + ".json"), "w") as outfile:
+    with open(os.path.join(save_path, json_file_name + ".json"), "w") as outfile:
         json.dump(result_dict, outfile, indent=4)
 
 

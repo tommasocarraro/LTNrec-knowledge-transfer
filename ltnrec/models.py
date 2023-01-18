@@ -112,7 +112,7 @@ class Trainer:
                 best_val_score = val_score
                 early_counter = 0
                 if save_path:
-                    self.save_model(save_path, wandb_train)
+                    self.save_model(save_path)
             else:
                 early_counter += 1
                 if early is not None and early_counter > early:
@@ -146,20 +146,15 @@ class Trainer:
         """
         raise NotImplementedError()
 
-    def save_model(self, path, wandb_train=False):
+    def save_model(self, path):
         """
         Method for saving the model.
         :param path: path where to save the model
-        :param wandb_train: whether the train is done with wandb or not. If True, it also creates a best model artifact.
         """
         torch.save({
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict()
         }, path)
-        if wandb_train:
-            model_artifact = wandb.Artifact("%s" % (path.split("/")[-1].split(".pth")[0]), type="model")
-            model_artifact.add_file(path)
-            wandb.log_artifact(model_artifact)
 
     def load_model(self, path):
         """
@@ -404,8 +399,8 @@ class Model:
         if os.path.exists("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix,
                                                                   self.model_name, dataset_id)):
             print("Grid search for model=%s-dataset=%s has been already performed. Find the config "
-                  "file at %s/config-model=%s-dataset=%s" % (self.model_name, dataset_id,
-                                                             local_config_path_prefix, self.model_name, dataset_id))
+                  "file at %s/config-model=%s-dataset=%s.json" % (self.model_name, dataset_id,
+                                                                  local_config_path_prefix, self.model_name, dataset_id))
         else:
             # if the best configuration artifact does not exists, we have to run a grid search for this model and
             # dataset
@@ -423,9 +418,6 @@ class Model:
                 """
                 # create a wandb run for performing this single grid search run
                 with wandb.init(project=wandb_project, job_type="grid_search") as run:
-                    # get artifact for this run
-                    run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(
-                        local_dataset_path_prefix)
                     # load the dataset from disk
                     with open("%s/%s" % (local_dataset_path_prefix, dataset_id,), 'rb') as dataset_file:
                         dataset = pickle.load(dataset_file)
@@ -508,51 +500,43 @@ class Model:
         """
         # todo gli si da il nome di un artifact di configurazione oppure un dizionario di configurazione
         # todo quindi in pratica decido io come fare training, cosi ho massima flessibilita'
-        try:
-            # check if a best model file for this model already exists, it is not necessary to train it another time
-            # we have already saved the model file and also a result file containing the test metrics corresponding
-            # to the best model
-            api.artifact("%s/model-model=%s-dataset=%s:latest" % (wandb_project, self.model_name, dataset_id))
-            print("Best model training for model=%s-dataset=%s has been already performed. Find the model artifact"
-                  "at model/model-model=%s-dataset=%s and result artifact at result/result-model=%s-dataset=%s" %
-                  (self.model_name, dataset_id, self.model_name, dataset_id, self.model_name, dataset_id))
-        except wandb.errors.CommError:
+        # check if a best model file for this model already exists, it is not necessary to train it another time
+        if os.path.exists(os.path.join(local_model_path_prefix, "model-model=%s-dataset=%s.pth" % (self.model_name,
+                                                                                                   dataset_id))):
+            print("Best model training for model=%s-dataset=%s has been already performed. Find the model file"
+                  "at %s/model-model=%s-dataset=%s.pth" % (self.model_name, dataset_id, local_model_path_prefix,
+                                                           self.model_name, dataset_id))
+        else:
             # if the best model file does not exist, we have to perform the training for this model
-            try:
-                # check if the best configuration artifact for this model and dataset exists with the given seed
-                api.artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                       remove_seed_from_dataset_name(dataset_id)
-                                                                       + str(config_seed)))
-            except wandb.errors.CommError:
-                # if the best configuration artifact does not exists with the given seed, we have to raise an exception
-                raise FileNotFoundError("The configuration artifact with name config-model=%s-dataset=%s does "
+            # check if a best configuration file exists
+            if not os.path.exists(os.path.join(local_config_path_prefix, "config-model=%s-dataset=%s.json" %
+                                                                         (self.model_name,
+                                                                          remove_seed_from_dataset_name(dataset_id)
+                                                                          + str(config_seed)))):
+                # if the best configuration file does not exists with the given seed, we have to raise an exception
+                raise FileNotFoundError("The configuration file with name config-model=%s-dataset=%s.json does "
                                         "not exist. Please, run a grid search to generate the requested "
                                         "file." % (self.model_name, remove_seed_from_dataset_name(dataset_id)
                                                    + str(config_seed)))
-            # set seed from reproducibility
-            set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last character in the string
-            # if the best configuration file already exists, we can train the model with the hyper-parameters specified
-            # in the configuration
-            with wandb.init(project=wandb_project, job_type="model_training") as run:
-                run.name = "model_training:model=%s-dataset=%s" % (self.model_name, dataset_id)
-                # download the best configuration file artifact
-                run.use_artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                           remove_seed_from_dataset_name(dataset_id)
-                                                                           + str(config_seed))
-                                 ).download(local_config_path_prefix)
-                # load hyper-parameters values from configuration file
-                with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
-                                                                  remove_seed_from_dataset_name(dataset_id)
-                                                                  + str(config_seed))) as json_file:
-                    best_config = json.load(json_file)
-                # download dataset artifact for performing the training of the model
-                run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(local_dataset_path_prefix)
-                # load dataset
-                with open("%s/%s" % (local_dataset_path_prefix, dataset_id), 'rb') as dataset_file:
-                    dataset = pickle.load(dataset_file)
-                # train the model on the downloaded dataset with the download best configuration
-                # this method will also upload a best model artifact on Weights and Biases
-                self.train_model(dataset, dataset_id, best_config, local_model_path_prefix)
+            else:
+                # run the training of the model
+                # set seed from reproducibility
+                set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last character in the string
+                # if the best configuration file already exists, we can train the model with the hyper-parameters
+                # specified in the configuration
+                with wandb.init(project=wandb_project, job_type="model_training") as run:
+                    run.name = "model_training:model=%s-dataset=%s" % (self.model_name, dataset_id)
+                    # load hyper-parameters values from configuration file
+                    with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
+                                                                      remove_seed_from_dataset_name(dataset_id)
+                                                                      + str(config_seed))) as json_file:
+                        best_config = json.load(json_file)
+                    # load dataset
+                    with open("%s/%s" % (local_dataset_path_prefix, dataset_id), 'rb') as dataset_file:
+                        dataset = pickle.load(dataset_file)
+                    # train the model on the downloaded dataset with the downloaded best configuration
+                    # this method will also create a best model file and save it in the local_model_path_prefix
+                    self.train_model(dataset, dataset_id, best_config, local_model_path_prefix)
 
     def train_model(self, data, dataset_id, best_config, local_model_path_prefix):
         """
@@ -591,44 +575,29 @@ class Model:
         :param wandb_project: name of the wandb project
         :return:
         """
-        try:
-            # check if a result artifact for this model already exists
-            api.artifact("%s/result-model=%s-dataset=%s:latest" % (wandb_project, self.model_name, dataset_id))
-            print("Result artifact result-model=%s-dataset=%s already exists." % (self.model_name, dataset_id))
-        except wandb.errors.CommError:
+        # check if a result file for this model already exists
+        if os.path.exists(os.path.join(local_result_path_prefix, "result-model=%s-dataset=%s.json" % (self.model_name,
+                                                                                                      dataset_id))):
+            print("Result file result-model=%s-dataset=%s.json already exists." % (self.model_name, dataset_id))
+        else:
             # if it does not exists, we have to create it
-            try:
-                # check if a best model artifact for this model already exists
-                api.artifact("%s/model-model=%s-dataset=%s:latest" % (wandb_project, self.model_name, dataset_id))
-            except wandb.errors.CommError:
-                raise ValueError("Best model artifact model-model=%s-dataset=%s does not exist. You should train"
+            # check if a best model artifact for this model already exists
+            if not os.path.exists(os.path.join(local_model_path_prefix, "model-model=%s-dataset=%s.pth" % (self.model_name,
+                                                                                                           dataset_id))):
+                raise ValueError("Best model file model-model=%s-dataset=%s.pth does not exist. You should train"
                                  "the model before testing it." % (self.model_name, dataset_id))
-            # if the best model artifact exists, we can run the test of the model
-            with wandb.init(project=wandb_project, job_type="model_test") as run:
-                # set the run name
-                run.name = "model_test:model=%s-dataset=%s" % (self.model_name, dataset_id)
-                # download the dataset artifact
-                run.use_artifact("%s/%s:latest" % (wandb_project, dataset_id)).download(local_dataset_path_prefix)
+            else:
+                # if the best model file exists, we can run the test of the model
                 # load the dataset from disk
                 with open("%s/%s" % (local_dataset_path_prefix, dataset_id), 'rb') as dataset_file:
                     dataset = pickle.load(dataset_file)
-                # download the best model artifact
-                run.use_artifact("%s/model-model=%s-dataset=%s:latest" % (wandb_project,
-                                                                          self.model_name, dataset_id)).download(
-                    local_model_path_prefix
-                )
-                # download the best configuration file artifact
-                run.use_artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-                                                                           remove_seed_from_dataset_name(dataset_id)
-                                                                           + str(config_seed))).download(
-                    local_config_path_prefix
-                )
                 # load hyper-parameters values from configuration file
                 with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
                                                                   remove_seed_from_dataset_name(dataset_id)
                                                                   + str(config_seed))) as json_file:
                     best_config = json.load(json_file)
-                # test the model - it also loads the best model file on the torch model and creates the result artifact
+                # test the model - it also loads the best model file on the torch model and creates the result
+                # file
                 print("Testing model=%s-dataset=%s" % (self.model_name, dataset_id))
                 self.test_model(dataset, dataset_id, best_config, local_model_path_prefix, local_result_path_prefix)
 
@@ -713,12 +682,6 @@ class StandardMFModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-        # create result artifact
-        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
-        result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
-        result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
-                                                                         dataset_id))
-        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
@@ -860,12 +823,6 @@ class LTNMFModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-        # create result artifact
-        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
-        result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
-        result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
-                                                                         dataset_id))
-        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
@@ -1027,12 +984,6 @@ class LTNMFGenresModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-        # create result artifact
-        print("Creating result artifact result-model=%s-dataset=%s" % (self.model_name, dataset_id))
-        result_artifact = wandb.Artifact("result-model=%s-dataset=%s" % (self.model_name, dataset_id), type="result")
-        result_artifact.add_file("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix, self.model_name,
-                                                                         dataset_id))
-        wandb.log_artifact(result_artifact)
 
     def grid_search(self, data, seed, save_path_prefix):
         if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
