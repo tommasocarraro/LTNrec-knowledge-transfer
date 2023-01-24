@@ -16,6 +16,7 @@ api.entity = "bmxitalia"
 eval_modes = ("ml", "ml&mr", "ml\mr")
 tr_folds = ("ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)")
 available_models = ("standard_mf", "ltn_mf", "ltn_mf_genres")
+tr_folds_mr = ("mr(movies)", "mr(movies+genres)")
 # create dataset manager
 data_manager = DataManager("./datasets")
 # get information for constructing the dataset that is the union of ml and mr
@@ -89,7 +90,7 @@ def create_dataset(local_dataset_path_prefix, ml_dataset, training_fold, dataset
     print("Creating dataset %s" % (dataset_name, ))
     # generate requested dataset from ml-100k
     dataset = get_dataset_by_name(ml_dataset, training_fold, p_to_keep, seed)
-    # add dataset pickle file to the created artifact
+    # create dataset pickle file
     with open(os.path.join(local_dataset_path_prefix, dataset_name), 'wb') as dataset_file:
         pickle.dump(dataset, dataset_file)
 
@@ -135,7 +136,32 @@ def create_datasets(mode, training_folds, seed, n_neg, local_dataset_path_prefix
                                (mode, dataset_name, n_neg, p, seed), p, seed)
 
 
-def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr_folds, n_neg=200,
+def create_datasets_mr(training_folds, seed, n_neg, local_dataset_path_prefix, proportions_to_keep=(1, )):
+    # create and upload all the requested datasets
+    for dataset_name in training_folds:
+        for p in proportions_to_keep:
+            # check if dataset already exists
+            if not os.path.exists(os.path.join(local_dataset_path_prefix, "mr-%s-%d-%.2f-seed_%d" % (dataset_name,
+                                                                                                     n_neg, p, seed))):
+                print("Creating dataset mr-%s-%d-%.2f-seed_%d" % (dataset_name, n_neg, p, seed))
+                # generate requested dataset
+                if dataset_name == "mr(movies)":
+                    dataset = data_manager.increase_data_sparsity(data_manager.get_mr_folds(seed, n_neg), p_to_keep=p,
+                                                                  seed=seed)
+                elif dataset_name == "mr(movies+genres)":
+                    dataset = data_manager.increase_data_sparsity(data_manager.get_mr_folds(seed, n_neg,
+                                                                                            with_genres=True),
+                                                                  p_to_keep=p, seed=seed)
+                else:
+                    raise ValueError("One of the given training fold names is not correct. Available training folds "
+                                     "for MindReader experiments are %s" % (", ".join(tr_folds_mr), ))
+                # create dataset pickle file
+                with open(os.path.join(local_dataset_path_prefix,
+                                       "mr-%s-%d-%.2f-seed_%d" % (dataset_name, n_neg, p, seed)), 'wb') as dataset_file:
+                    pickle.dump(dataset, dataset_file)
+
+
+def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr_folds, n_neg=100,
                    models=available_models, proportions_to_keep=(1, ), starting_seed=0, n_runs=30,
                    num_workers=os.cpu_count()):
     """
@@ -264,39 +290,115 @@ def run_experiment(wandb_project, evaluation_modes=eval_modes, training_folds=tr
                                  if check_compatibility(model, "%s-%s-%d-seed_%d" % (mode, dataset_name, n_neg,
                                                                                      starting_seed)))
     #
-    create_report_json(local_result_path_prefix, "./%s" % (wandb_project, ))
+    create_report_json(local_result_path_prefix, "./%s" % (wandb_project, ), seeds=list(range(starting_seed, n_runs)))
     generate_report_table("./%s/experiment-results.json" % (wandb_project, ),
                           models=models, evaluation_modes=evaluation_modes, training_folds=training_folds)
 
     # todo sarebbe interessante fare una funzione make che genera loaders e modello
-    # todo cercare il discorso di logging
-    # todo fare una funzione utilita' che va a pescare tutti i result artifacts e mi crea un result artifact overall
-    # todo capire come posso sovrascrivere una grid search per un dataset con un nuovo seed
-    # todo mettere i messaggi di log come quelli per la creazione dei dataset in tutte le procedure
-    # todo potrei salvare il miglior modello anche sulle grid search, solo il migliore ogni volta, cosi avviene
-    #  versioning anche li
-    # todo vorrei poter fare le grid search che voglio ma anche non doverla fare
-    # todo capire bene cosa succede quando lancio la grid search direttamente dal training
-    # todo idea: se esiste un best config artifact, allora seleziono quello per fare il training
     # todo capire se ha senso che do anche la possibilita' di passare un dizionaro di configurazione
-    # todo sistemare il discorso del seed in parallelo
     # todo aggiungere baselines che possono fare cose simili, esperimento cold start, esperimento velocita di training
 
 
+def run_sparsity_exp_mr(wandb_project, training_folds=tr_folds_mr, n_neg=100,
+                        models=available_models, proportions_to_keep=(1, ), starting_seed=0, n_runs=30,
+                        num_workers=os.cpu_count()):
+
+    local_dataset_path_prefix = "./%s/datasets" % (wandb_project, )
+    local_config_path_prefix = "./%s/configs" % (wandb_project, )
+    local_model_path_prefix = "./%s/models" % (wandb_project, )
+    local_result_path_prefix = "./%s/results" % (wandb_project, )
+
+    # create folder to store datasets if it does not already exist
+    if not os.path.exists(local_dataset_path_prefix):
+        os.makedirs(local_dataset_path_prefix)
+
+    # create folder to store configurations if it does not already exist
+    if not os.path.exists(local_config_path_prefix):
+        os.makedirs(local_config_path_prefix)
+
+    # create folder to store models if it does not already exist
+    if not os.path.exists(local_model_path_prefix):
+        os.makedirs(local_model_path_prefix)
+
+    # create folder to store results if it does not already exist
+    if not os.path.exists(local_result_path_prefix):
+        os.makedirs(local_result_path_prefix)
+
+    # create list of models
+    models_list = []
+    if "standard_mf" in models:
+        models_list.append(StandardMFModel())
+    if "ltn_mf" in models:
+        models_list.append(LTNMFModel())
+    if "ltn_mf_genres" in models:
+        models_list.append(LTNMFGenresModel())
+
+    # set mode thread for wandb if the num of cpu is greater than 1
+    if num_workers > 1:
+        os.environ["WANDB_START_METHOD"] = "thread"
+
+    # create datasets and save them
+    Parallel(n_jobs=num_workers)(delayed(create_datasets_mr)(training_folds, seed, n_neg,
+                                                             local_dataset_path_prefix, proportions_to_keep)
+                                 for seed in range(starting_seed, starting_seed + n_runs))
+
+    # run grid search of each model on each dataset with seed 0 and proportion 1
+    Parallel(n_jobs=num_workers)(delayed(grid_search)(model,
+                                                      "mr-%s-%d-%.2f-seed_%d" % (dataset_name, n_neg, p, starting_seed),
+                                                      local_dataset_path_prefix,
+                                                      local_config_path_prefix,
+                                                      wandb_project)
+                                 for model in models_list
+                                 for dataset_name in training_folds
+                                 for p in proportions_to_keep
+                                 if check_compatibility(model, "mr-%s-%d-seed_%d" % (dataset_name, n_neg,
+                                                                                     starting_seed)))
+
+    # # train every model on every dataset with every seed with best configuration files obtained
+    Parallel(n_jobs=num_workers)(delayed(train)(model,
+                                                "mr-%s-%d-%.2f-seed_%d" % (dataset_name, n_neg, p, seed),
+                                                starting_seed,
+                                                local_dataset_path_prefix,
+                                                local_config_path_prefix,
+                                                local_model_path_prefix,
+                                                wandb_project)
+                                 for model in models_list
+                                 for dataset_name in training_folds
+                                 for seed in range(starting_seed, starting_seed + n_runs)
+                                 for p in proportions_to_keep
+                                 if check_compatibility(model, "mr-%s-%d-seed_%d" % (dataset_name, n_neg,
+                                                                                     starting_seed)))
+    # # #
+    # # # # test every model on every dataset with every seed with best model files obtained
+    Parallel(n_jobs=num_workers)(delayed(model_test)(model,
+                                                     "mr-%s-%d-%.2f-seed_%d" % (dataset_name, n_neg, p, seed),
+                                                     starting_seed,
+                                                     local_dataset_path_prefix,
+                                                     local_config_path_prefix,
+                                                     local_model_path_prefix,
+                                                     local_result_path_prefix,
+                                                     wandb_project)
+                                 for model in models_list
+                                 for dataset_name in training_folds
+                                 for seed in range(starting_seed, starting_seed + n_runs)
+                                 for p in proportions_to_keep
+                                 if check_compatibility(model, "mr-%s-%d-seed_%d" % (dataset_name, n_neg,
+                                                                                     starting_seed)))
+    create_report_json(local_result_path_prefix, "./%s" % (wandb_project,), seeds=list(range(starting_seed, n_runs)))
+    generate_report_table("./%s/experiment-results.json" % (wandb_project,),
+                          models=models, evaluation_modes=("mr", ), training_folds=training_folds,
+                          proportions_to_keep=proportions_to_keep)
+
 if __name__ == '__main__':
-    run_experiment(wandb_project='final',
+    run_experiment(wandb_project='final-stable-100-ndcg',
                    # evaluation_modes="ml\mr",
-                   # training_folds="ml",  # , "ml(movies)|mr(genres)"
+                   # training_folds=("ml(movies)|mr(genres)", "ml|mr(movies+genres)"),  # , "ml(movies)|mr(genres)"
                    # models="standard_mf",
-                   # proportions_to_keep=(0.05, ),  # 1, 0.5, 0.2, 0.1, 0.05
-                   starting_seed=0, n_runs=10)
-    # todo verificare che tutto sia corretto e che effettivamente quelli siano i migliori iperparametri
-    # todo applicare un metodo tipo optuna o wandb e verificare se ci sono parametri migliori
-    # todo forse bisognerebbe usare il logger per fare in modo che le cose vengano loggate correttamente anche su wandb
-    # todo vorrei una struttura un po' meglio per i file
-    # todo non mi piacere vedere tutte le run di una grid search per ogni modello, vorrei vedere solo una grid search per modello
-    # todo forse ha senso scaricare l'artefatto solo se non e' gia' presente sulla folder. si puo' fare una funzione adibita a questo
-    # TODO c'e' un errore semplicemente sulla fase di test per alcuni modelli, non carica il JSON -> devo eliminare i mancanti
+                   # proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),  # 1, 0.5, 0.2, 0.1, 0.05
+                   starting_seed=0, n_runs=30)
+    # run_sparsity_exp_mr(wandb_project='sparsity-exp-mr',
+    #                     proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),
+    #                     starting_seed=0, n_runs=2)
     # todo fare anche il test con iper-parametri fissati per i modelli, provare con un numero variabile di fattori latenti
     # todo tipo testare a parita' di iper-parametri comuni come cambiano le performance
     # todo rifare esperimenti con aumento di sparsita'
@@ -306,5 +408,22 @@ if __name__ == '__main__':
     # todo forse non funziona bene apprendere su un dataset e poi utilizzare su un altro
     # todo rifare l'esperimento con 100 come su mind reader
     # todo provare con meno seed ma fare grid search su ogni dataset
-    # todo stesso modello con configurazione dei pesi diversa da risultati diversi
+    # todo stesso modello con configurazione dei pesi diversa da risultati diversi -> era la normale utilizzata sul bias il problema
+    # todo rifare anche esperimento con 200 negativi, per rendere le cose piu' difficili e vedere se la knowledge aiuta anche in quel caso
+    # todo aggiungere i 20 seed all'esperimento nuovo
+    # todo vedere se ottimizzando la ndcg le cose vanno meglio
+    # todo andare bene a vedere cosa faccio sulla funzione che aumenta la sparsity, se riduco i rating di tutti gli utenti, poi succede che rendo le performance di LikesGenre basse
+    # todo questo succede perche' gli embedding degli utenti di movielens avranno poca informazione al loro interno, ovvero non sapranno ancora se all'utente piace uno specifico genere o meno
+    # todo mi aspetto che il caso in cui andra' meglio sara' quello movies+genres, anzi movies e basta perche' li ho veri rating degli utenti almeno per i film di MindReader e quindi anche di qualcuno in MovieLens
+    # todo invece, nel caso dei generi rimane la problematica che sto togliendo troppe info dagli embedding degli utenti
+    # todo secondo me, quella formula funziona bene su MindReader e basta, ovvero nel caso in cui diminuisco i rating sui film ma per gli utenti imparo bene i generi perche' ho tutti i rating sui generi
+    # todo se io rendo sparso l'intero dataset, anche se ho i rating sui generi, gli embedding degli utenti di movielens saranno scarsi di informazione e quindi scarsa sara' la vericita' di LikesGenre, quindi
+    # todo la formula non funzionera'
+    # todo l'obiettivo e' far vedere le cose quando ho solo i rating di ml in test, senza nessun film anche in MindReader
+    # todo si puo' pensare di frezzare i pesi di LikesGenre quando si fanno gli updates con la formula dei generi
+    # todo capire se ha senso che i dataset sono diversi a seconda della valutazione a parita' di seed, ad esempio ml avra' piu' o meno ratings in training a seconda della valutazione, ad esempio, se un utente di ml non ha visto nessun film di mr, allora quel utente non sara' in validation o test in ml&mr
+    # todo forse ml&mr e' il caso in cui vado peggio perche' ho molti meno esempi di validation/test rispetto agli altri due tipi di valutazione
+    # todo sbilanciamento del dataset puo' essere un problema
+    # todo e' un problema anche il fatto di aggregare voti su film con voti su generi forse? forse non dovrebbero influenzarsi in quella maniera
+    # todo quello che voglio provare a fare ora e' utilizzare l'info dei generi di MindReader invece di quella di ml-100k come info di base
     # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si

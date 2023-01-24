@@ -116,13 +116,13 @@ def append_to_result_file(file_name, experiment_name, result, seed):
         json.dump(data, outfile, indent=4)
 
 
-def create_report_json(local_result_path_prefix, save_path, json_file_name="experiment-results"):
+def create_report_json(local_result_path_prefix, save_path, seeds, json_file_name="experiment-results"):
     # create dictionary containing the results
     result_dict = {}
     # iterate over created result files
     for result_file in os.listdir(local_result_path_prefix):
-        # check that the file is a JSON file and begins with 'result-'
-        if result_file.endswith(".json") and result_file.startswith("result-"):
+        # check that the file is a JSON file and begins with 'result-' and the seed is one of the requested
+        if result_file.endswith(".json") and result_file.startswith("result-") and int(result_file.split(".json")[0].split("_")[-1]) in seeds:
             # get file content
             with open(os.path.join(local_result_path_prefix, result_file), "r") as json_file:
                 metrics_values = json.load(json_file)
@@ -132,29 +132,35 @@ def create_report_json(local_result_path_prefix, save_path, json_file_name="expe
             evaluation_mode = result_file.split("-")[2].split("=")[1]
             # get training fold of the experiment
             training_fold = result_file.split("-")[3]
+            # get proportion of training ratings per user
+            prop = result_file.split("-")[5]
 
             # put results at the right place in the big report dict
             if evaluation_mode not in result_dict:
-                result_dict[evaluation_mode] = {training_fold: {model: {metric: [metrics_values[metric]]
-                                                                        for metric in metrics_values}}}
+                result_dict[evaluation_mode] = {training_fold: {prop: {model: {metric: [metrics_values[metric]]
+                                                                               for metric in metrics_values}}}}
             elif training_fold not in result_dict[evaluation_mode]:
-                result_dict[evaluation_mode][training_fold] = {model: {metric: [metrics_values[metric]]
-                                                                       for metric in metrics_values}}
-            elif model not in result_dict[evaluation_mode][training_fold]:
-                result_dict[evaluation_mode][training_fold][model] = {metric: [metrics_values[metric]]
-                                                                      for metric in metrics_values}
+                result_dict[evaluation_mode][training_fold] = {prop: {model: {metric: [metrics_values[metric]]
+                                                                              for metric in metrics_values}}}
+            elif prop not in result_dict[evaluation_mode][training_fold]:
+                result_dict[evaluation_mode][training_fold][prop] = {model: {metric: [metrics_values[metric]]
+                                                                             for metric in metrics_values}}
+            elif model not in result_dict[evaluation_mode][training_fold][prop]:
+                result_dict[evaluation_mode][training_fold][prop][model] = {metric: [metrics_values[metric]]
+                                                                            for metric in metrics_values}
             else:
                 for metric in metrics_values:
-                    result_dict[evaluation_mode][training_fold][model][metric].append(metrics_values[metric])
+                    result_dict[evaluation_mode][training_fold][prop][model][metric].append(metrics_values[metric])
 
     # loop over the big report dict to compute mean and std of the experiments with different seeds
     for evaluation_mode in result_dict:
         for training_fold in result_dict[evaluation_mode]:
-            for model in result_dict[evaluation_mode][training_fold]:
-                for metric in result_dict[evaluation_mode][training_fold][model]:
-                    result_dict[evaluation_mode][training_fold][model][metric] = (
-                        np.mean(result_dict[evaluation_mode][training_fold][model][metric]),
-                        np.std(result_dict[evaluation_mode][training_fold][model][metric]))
+            for prop in result_dict[evaluation_mode][training_fold]:
+                for model in result_dict[evaluation_mode][training_fold][prop]:
+                    for metric in result_dict[evaluation_mode][training_fold][prop][model]:
+                        result_dict[evaluation_mode][training_fold][prop][model][metric] = (
+                            np.mean(result_dict[evaluation_mode][training_fold][prop][model][metric]),
+                            np.std(result_dict[evaluation_mode][training_fold][prop][model][metric]))
 
     # create JSON file with the result
     with open(os.path.join(save_path, json_file_name + ".json"), "w") as outfile:
@@ -204,7 +210,8 @@ def generate_report_table(report_dict,
                           metrics=("hit@10", "ndcg@10"),
                           models=("standard_mf", "ltn_mf", "ltn_mf_genres"),
                           evaluation_modes=("ml", "ml&mr", "ml\mr"),
-                          training_folds=("ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)")):
+                          training_folds=("ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)"),
+                          proportions_to_keep=(1, )):
     # check if report_dict is a dict - if it is not a dict, it has to be a path to a JSON file
     if not isinstance(report_dict, dict):
         with open(report_dict, "r") as json_file:
@@ -213,31 +220,56 @@ def generate_report_table(report_dict,
     table = "\\begin{table*}[ht!]\n"
     table += "\caption{Table title}\label{table-label}\n"
     table += "\centering\n"
-    table += "\\begin{tabular}{| c | c | %s}\n" % ("".join(["c " * len(metrics) + "| " for _ in models], ))
+    table += "\\begin{tabular}{| c | c | %s %s}\n" % ("c | " if len(proportions_to_keep) != 1 else "",
+                                                      "".join(["c " * len(metrics) + "| " for _ in models], ))
     table += "\hline\n"
     table += "&"
+    if len(proportions_to_keep) != 1:
+        table += " &"
     for model in models:
         table += " & \multicolumn{%d}{c |}{%s}" % (len(metrics), model.replace("_", "\\_"))
     table += "\\\\\n"
     table += "\hline\n"
     table += "&"
+    if len(proportions_to_keep) != 1:
+        table += " & \\% ratings"
     for _ in models:
         for metric in metrics:
             table += " & %s" % (metric, )
     table += "\\\\\n"
     table += "\hline\n"
     for mode in evaluation_modes:
-        table += "\multirow{%d}{*}{%s}" % (len(training_folds), mode.replace("\\", " $\setminus$ ").replace("&", " $\cap$ "))
+        table += "\multirow{%d}{*}{%s}" % (len(training_folds) * len(proportions_to_keep), mode.replace("\\", " $\setminus$ ").replace("&", " $\cap$ "))
         for tr_fold in training_folds:
-            table += " & %s" % (tr_fold.replace("|", " $\cup$ "), )
-            for model in models:
-                if tr_fold in report_dict[mode] and model in report_dict[mode][tr_fold]:
-                    for metric in metrics:
-                        table += " & %.3f$_{(%.3f)}$" % (report_dict[mode][tr_fold][model][metric][0],
-                                                         report_dict[mode][tr_fold][model][metric][1])
-                else:
-                    table += " & na" * len(metrics)
-            table += "\\\\\n"
+            if len(proportions_to_keep) != 1:
+                table += " & \multirow{%d}{*}{%s}" % (len(proportions_to_keep), tr_fold.replace("|", " $\cup$ "), )
+                for idx, prop in enumerate(proportions_to_keep):
+                    if idx != 0:
+                        table += " &"
+                    table += " & %d\\%s" % (prop * 100, "%")
+                    for model in models:
+                        prop_str = "%.2f" % (prop, )
+                        if tr_fold in report_dict[mode] and prop_str in report_dict[mode][tr_fold] and model in report_dict[mode][tr_fold][prop_str]:
+                            for metric in metrics:
+                                table += " & %.3f$_{(%.3f)}$" % (report_dict[mode][tr_fold][prop_str][model][metric][0],
+                                                                 report_dict[mode][tr_fold][prop_str][model][metric][1])
+                        else:
+                            table += " & na" * len(metrics)
+                    table += "\\\\\n"
+            else:
+                table += " & %s" % (tr_fold.replace("|", " $\cup$ "), )
+                for model in models:
+                    prop_str = "%.2f" % (1, )
+                    if tr_fold in report_dict[mode] and model in report_dict[mode][tr_fold][prop_str]:
+                        for metric in metrics:
+                            table += " & %.3f$_{(%.3f)}$" % (report_dict[mode][tr_fold][prop_str][model][metric][0],
+                                                             report_dict[mode][tr_fold][prop_str][model][metric][1])
+                    else:
+                        table += " & na" * len(metrics)
+                table += "\\\\\n"
+            if len(proportions_to_keep) != 1:
+                table += "\cline{2-%d}\n" % (len(metrics) * len(models) + 3)
+
         table += "\hline\n"
     table += "\end{tabular}\n"
     table += "\end{table*}"

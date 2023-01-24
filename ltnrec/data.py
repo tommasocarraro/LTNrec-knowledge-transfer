@@ -58,9 +58,10 @@ class Dataset:
 
 
 class DatasetWithGenres(Dataset):
-    def __init__(self, train, val, test, n_users, n_items, name, n_genres, item_genres_matrix=None):
+    def __init__(self, train, val, test, n_users, n_items, name, n_genres, n_genre_ratings, item_genres_matrix=None):
         super(DatasetWithGenres, self).__init__(train, val, test, n_users, n_items, name)
         self.n_genres = n_genres
+        self.n_genre_ratings = n_genre_ratings
         self.item_genres_matrix = item_genres_matrix
 
     def set_item_genres_matrix(self, item_genres_matrix):
@@ -834,9 +835,9 @@ class DataManager:
         If fair is True, the negative items will be sampled from the joint movies, if it is False, from both ml-100k
         and the joint set movies.
         """
+        assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode, )
         # set seed for the sampling of random negative items
         set_seed(seed)
-        assert mode == "ml" or mode == "ml\mr" or mode == "ml&mr", "The selected mode (%s) does not exist" % (mode,)
         # we need a dataframe because it allows to apply group by operations
         ratings = pd.DataFrame.from_records(self.ml_100_ratings)
         n_users = ratings[0].nunique()
@@ -889,7 +890,6 @@ class DataManager:
                 assert len(not_seen_by_u) > n_neg, "Problem: parameter n_neg (%d) is higher than the available " \
                                                    "number of movies from which we can sample (%d). Set a lower " \
                                                    "number of n_neg" % (n_neg, len(not_seen_by_u))
-                # todo forse qua c'e' un bug perche' manca il random state - manca il set del seed - messo su
                 neg_movies_test_for_u = random.sample(not_seen_by_u, n_neg)
                 test.append([[u_idx, item] for item in neg_movies_test_for_u + [sampled_pos_u_ratings[0]]])
                 # if we have at least three positive ratings, it means we have have to create also the validation
@@ -906,6 +906,116 @@ class DataManager:
         train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
 
         return Dataset(train, validation, test, n_users, n_items, name="ml")
+
+    def get_mr_folds(self, seed, n_neg=100, with_genres=False):
+        """
+        Creates and returns the training, validation, and test set of the MindReader dataset.
+
+        The procedure starts from the entire datasets. To create the test set, one random positive movie rating for
+        each user is held-out. To complete the test example of the user, `n_neg` irrelevant movies (movies never seen
+        by the user in the dataset) are randomly sampled.
+        The metrics evaluate the recommendation based on the position of the positive movie in a ranking containing all
+        the `n_neg` + 1 movies.
+
+        The validation set is constructed in the same way, starting from the remaining positive ratings in the dataset.
+
+        Note that the test positive rating is held-out only if the user has at least 2 ratings, in such a way that at
+        least one positive rating remains in the training set. The same idea is applied to the validation set.
+
+        The `seed` parameter is used for reproducibility of experiments (random sample of positive and negative movies).
+
+        The `n_neg` parameter is used to decide the number of random negative samples used to construct each
+        validation/test example. The higher the number the more challenging will be for the model to put
+        the target item in the top-N positions of the ranking.
+
+        The `with_genres` parameter is used to decide whether to include the ratings for movie genres in the
+        training set. By default, it is `False`.
+        """
+        # set seed for the sampling of random negative items
+        set_seed(seed)
+        # we need a dataframe because it allows to apply group by operations
+        ratings = pd.DataFrame.from_records(self.mr_movie_ratings)
+        # get user ids - this is used after if the user wants to add the ratings for the genres to the dataset
+        user_ids = ratings["u_idx"].unique()
+        # get number of users and items
+        n_users = ratings["u_idx"].nunique()
+        n_items = ratings["i_idx"].nunique()
+        # group by user idx
+        groups = ratings.groupby(by=["u_idx"])
+        # take set of mr movies - used to compute the set of negative movies for each user
+        mr_movies = set(ratings["i_idx"].unique())
+        # initialize lists that contain validation and test examples
+        validation, test = [], []
+        for u_idx, u_ratings in groups:
+            # compute the set of negative movies for the current user
+            not_seen_by_u = mr_movies - set(u_ratings["i_idx"])
+            # positive ratings for the user
+            pos_u_ratings = u_ratings[u_ratings["rate"] == 1]
+            # check if it is possible to sample - leave at least one positive rating in the training set
+            # if there is only one positive ratings for user u, we leave that rating in the training set
+            # the validation and test set will not include this specific user
+            if len(pos_u_ratings) > 1:
+                # if we have at least three positive ratings, take one random positive rating for test and one
+                # for validation
+                if len(pos_u_ratings) > 2:
+                    sampled_pos_u_ratings = pos_u_ratings.sample(n=2, random_state=seed)
+                else:
+                    # if we have just two ratings, we held-out one for test and leave the other one in the training set
+                    sampled_pos_u_ratings = pos_u_ratings.sample(n=1, random_state=seed)
+                # remove sampled ratings from the dataset, since they are ratings held out for validation and/or test
+                ratings.drop(sampled_pos_u_ratings.index, inplace=True)
+                # get list of sampled item indexes
+                sampled_pos_u_ratings = list(sampled_pos_u_ratings["i_idx"])
+                # check if we have enough movie to sample
+                assert len(not_seen_by_u) > n_neg, "Problem: parameter n_neg (%d) is higher than the available " \
+                                                   "number of movies from which we can sample (%d). Set a lower " \
+                                                   "number of n_neg" % (n_neg, len(not_seen_by_u))
+                neg_movies_test_for_u = random.sample(not_seen_by_u, n_neg)
+                test.append([[u_idx, item] for item in neg_movies_test_for_u + [sampled_pos_u_ratings[0]]])
+                # if we have at least three positive ratings, it means we have have to create also the validation
+                # example for u
+                if len(pos_u_ratings) > 2:
+                    neg_movies_val_for_u = random.sample(not_seen_by_u, n_neg)
+                    validation.append([[u_idx, item] for item in neg_movies_val_for_u + [sampled_pos_u_ratings[1]]])
+
+        validation = np.array(validation)
+        test = np.array(test)
+
+        # create np array of training ratings
+        train = ratings.to_dict("records")
+        train = np.array([(rating["u_idx"], rating["i_idx"], rating["rate"]) for rating in train])
+
+        # add ratings for movie genres if it has been requested by the user
+        if with_genres:
+            # compute itemXgenres matrix
+            # get genres of MindReader movies
+            movie_to_genres = {movie["idx"]: movie["genres"].split("|") for movie in self.mr_movie_info}
+            # create np.array of movie-genre pairs
+            movie_to_genres = np.array([[movie, int(genre)] for movie in movie_to_genres
+                                        for genre in movie_to_genres[movie]
+                                        if genre != 'None'])
+            # convert the array in a sparse matrix (items X genres)
+            movie_genres_matrix = csr_matrix((np.ones(len(movie_to_genres)),
+                                              (movie_to_genres[:, 0], movie_to_genres[:, 1])),
+                                             shape=(n_items, len(self.genres)))
+            # get ratings for movie genres
+            genre_ratings = pd.DataFrame.from_records(self.mr_genre_ratings)
+            genre_ratings = np.array(genre_ratings)
+            # update the number of users - some users have only rated movie genres
+            n_users = len(set(user_ids) | set(genre_ratings[:, 0]))
+            n_movies = n_items
+            # update the number of items - we have added the movie genres to the dataset
+            n_items = n_items + len(set(genre_ratings[:, 1]))  # we consider genres as items
+            # move the genre indexes after the movie indexes in the dataset -> the genre embeddings will be the last
+            # in the embedding tensor of the model
+            new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
+            # the training set contains both ratings on movies and on movie genres
+            return DatasetWithGenres(np.concatenate([train, new_genre_ratings], axis=0),
+                                     validation, test, n_users, n_items,
+                                     name="mr(movies+genres)", n_genres=len(self.genres),
+                                     n_genre_ratings=len(new_genre_ratings), item_genres_matrix=movie_genres_matrix)
+
+        return Dataset(train, validation, test, n_users, n_items, name="mr(movies)")
 
     def get_fusion_folds_given_ml_folds(self, train_set, ml_val, ml_test, idx_mapping=None, genre_ratings=None,
                                         item_genres_matrix=None):
@@ -961,7 +1071,8 @@ class DataManager:
             return DatasetWithGenres(np.concatenate([fusion_train, new_genre_ratings], axis=0),
                                      fusion_val, fusion_test, n_users, n_items,
                                      name="ml|mr(movies+genres)" if idx_mapping is not None else "ml(movies)|mr(genres)",
-                                     n_genres=len(self.genres), item_genres_matrix=item_genres_matrix)
+                                     n_genres=len(self.genres), n_genre_ratings=len(new_genre_ratings),
+                                     item_genres_matrix=item_genres_matrix)
 
         return Dataset(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
                        train_set["i_idx"].nunique(), name="ml|mr(movies)")
@@ -970,20 +1081,31 @@ class DataManager:
     def increase_data_sparsity(dataset, p_to_keep, seed):
         """
         It removes ratings from the training set of the given dataset to increase its sparsity.
+        If the dataset includes some genre ratings, it only removes movie ratings.
 
         :param dataset: the Dataset object from which we need to remove training ratings
         :param p_to_keep: the proportion of ratings that has to be kept for each user of the training set. The other
         ratings will be discarded
         :param seed: seed for reproducibility of the experiments
-        :return the dataset with a proportion of training ratings per user equal to `p_to_keep`
+        :return the dataset with a proportion of training ratings per user equal to `p_to_keep`, without removing genre
+        ratings if there are
         """
         assert 0 < p_to_keep <= 1, "The proportion of ratings to be kept for each user is out of the possible range."
+        # if p_to_keep is 1, it means that we do not have to remove anything
         if p_to_keep != 1:
+            genre_ratings = None  # initialization
             train_df = pd.DataFrame(dataset.train, columns=["uid", "iid", "rate"])
+            if isinstance(dataset, DatasetWithGenres):
+                # remove genre ratings to avoid removing them with the random sampling
+                genre_ratings = train_df[-dataset.n_genre_ratings:]
+                train_df = train_df[:-dataset.n_genre_ratings]
             groups = train_df.groupby(by=["uid"])
             for u_idx, u_ratings in groups:
                 ratings_to_remove = u_ratings.sample(frac=(1 - p_to_keep), random_state=seed)
                 train_df.drop(ratings_to_remove.index, inplace=True)
 
-            dataset.train = train_df.to_numpy()
+            if isinstance(dataset, DatasetWithGenres):
+                dataset.train = np.concatenate([train_df.to_numpy(), genre_ratings], axis=0)
+            else:
+                dataset.train = train_df.to_numpy()
         return dataset
