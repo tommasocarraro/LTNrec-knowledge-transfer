@@ -20,9 +20,6 @@ genre_subclass = [(mr_genres[triple["head_uri"]], mr_genres[triple["tail_uri"]])
                   if triple["tail_uri"] in mr_genres and mr_genres[triple["tail_uri"]] in genres
                   if triple["relation"] == "SUBCLASS_OF"]
 
-print(genre_subclass)
-pd.d()
-
 rating_per_genre = {}
 for genre_rating in mr_genre_ratings_original:
     if mr_genres[genre_rating["uri"]] not in rating_per_genre:
@@ -32,12 +29,13 @@ for genre_rating in mr_genre_ratings_original:
 
 sorted_rating_per_genre = sorted(rating_per_genre.items(), key=lambda x: x[1])
 sorted_rating_per_genre.reverse()
-print(sorted_rating_per_genre)
+print(len(sorted_rating_per_genre))
 
-("Action Film", "Adventure Film", "Animated Film", "Children's Film", "Comedy Film", "Crime Film",
-"Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
-"Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
-"Western Film")
+# todo serve fare un pre-processing per mettere assieme le cose? prima lascio cosi e poi provo con pre-processing al massimo
+
+#  "Animated Film"
+# "Film Noir"
+# "Western Film")
 
 # film based on literature
 # romantic comedy

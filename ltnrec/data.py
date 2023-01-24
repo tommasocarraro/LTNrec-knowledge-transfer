@@ -116,12 +116,12 @@ class DataManager:
                        "Documentary Film", "Drama Film", "Fantasy Film", "Film Noir", "Horror Film", "Musical Film",
                        "Mystery Film", "Romance Film", "Science Fiction Film", "Thriller Film", "War Film",
                        "Western Film")
-        # process ml-100k
-        if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv")):
-            self.process_ml_100k()
         # process MindReader
         if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv")):
             self.process_mr()
+        # process ml-100k
+        if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv")):
+            self.process_ml_100k()
         # save the files which are mostly used by the pre-processing procedure
         self.ml_100_movie_info = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"),
                                              encoding="iso-8859-1", header=None).to_dict("records")
@@ -133,6 +133,9 @@ class DataManager:
                                                          "mindreader/processed/movie_ratings.csv")).to_dict("records")
         self.mr_genre_ratings = pd.read_csv(os.path.join(self.data_path,
                                                          "mindreader/processed/genre_ratings.csv")).to_dict("records")
+        self.mr_genre_to_idx = pd.read_csv(os.path.join(self.data_path,
+                                                        "mindreader/processed/movie_genres.csv")).to_dict("records")
+        self.mr_genre_to_idx = {genre["name"]: genre["genre_idx"] for genre in self.mr_genre_to_idx}
         # create the match between the movies of ml-100k and the movies of MindReader
         self.ml_to_mr = self.create_mapping()
 
@@ -248,7 +251,8 @@ class DataManager:
             movie_genres = [genre for _, genre in row[6:].items()]
             # get indexes of the genres that the item belongs to - these indexes follow the order in self.genres
             # which is also the order specified in the readME of the ml-100k dataset
-            movie_genres_idx = [str(idx) for idx, genre in enumerate(movie_genres) if genre == 1]
+            movie_genres_idx = [str(self.mr_genre_to_idx[self.genres[idx]])
+                                for idx, genre in enumerate(movie_genres) if genre == 1]
             # we specify None when an item has no genres - the genres are specified with their indexes according to the
             # order in self.genres
             ml_100_movies_records.append({"idx": row[0], "title": row[1], "genres": "|".join(movie_genres_idx)
@@ -318,13 +322,27 @@ class DataManager:
         mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
         # we want ratings only for the allowed genres - we create a mapping between URIs and genre names
         # for allowed genres
-        mr_genres = {entity["uri"]: entity["name"] for entity in mr_entities_dict if "Genre" in entity["labels"]
-                     if entity["name"] in self.genres}
-        # remove unknown ratings
-        mr_movie_ratings = mr_ratings[
-            mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+        mr_genres = {entity["uri"]: entity["name"] for entity in mr_entities_dict if "Genre" in entity["labels"]}
+        # get dict with number of ratings for each genre
         mr_genre_ratings = mr_ratings[
             mr_ratings["uri"].isin(mr_genres) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+        rating_per_genre = {}
+        for genre_rating in mr_genre_ratings:
+            if genre_rating["uri"] not in rating_per_genre:
+                rating_per_genre[genre_rating["uri"]] = 1
+            else:
+                rating_per_genre[genre_rating["uri"]] += 1
+        # create a unique indexing for the genres - only for genres that have at least one rating
+        genre_to_idx, g_idx = {}, 0
+        for genre_uri in mr_genres:
+            if genre_uri not in genre_to_idx and genre_uri in rating_per_genre:
+                genre_to_idx[genre_uri] = g_idx
+                g_idx += 1
+        # create genre_name_to_idx dict for matching genres of ml-100k movies
+        genre_name_to_idx = {mr_genres[uri]: idx for uri, idx in genre_to_idx.items()}
+        # remove unknown movie ratings
+        mr_movie_ratings = mr_ratings[
+            mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
         u = i = 0
         user_mapping = {}
         item_mapping = {}
@@ -355,7 +373,7 @@ class DataManager:
             rating["userId"] = user_mapping[rating["userId"]]
             # get index of the genre in the self.genres list - this list is used both for ml-100k and MindReader
             # to unify the indexing of the genres
-            rating["uri"] = self.genres.index(mr_genres[rating["uri"]])
+            rating["uri"] = genre_to_idx[rating["uri"]]
             rating["sentiment"] = int(rating["sentiment"] > 0)
             mr_genre_ratings_new.append(
                 {"u_idx": rating["userId"], "g_idx": rating["uri"], "rate": rating["sentiment"]})
@@ -367,14 +385,14 @@ class DataManager:
         mr_movie_genre_dict = {}
         for triple in mr_triples_dict:
             # consider only mapped movies and allowed genres
-            if triple["head_uri"] in item_mapping and triple["tail_uri"] in mr_genres \
+            if triple["head_uri"] in item_mapping and triple["tail_uri"] in genre_to_idx \
                     and triple["relation"] == "HAS_GENRE":
                 if item_mapping[triple["head_uri"]] not in mr_movie_genre_dict:
                     mr_movie_genre_dict[item_mapping[
-                        triple["head_uri"]]] = [self.genres.index(mr_genres[triple["tail_uri"]])]
+                        triple["head_uri"]]] = [genre_to_idx[triple["tail_uri"]]]
                 else:
                     mr_movie_genre_dict[item_mapping[
-                        triple["head_uri"]]].append(self.genres.index(mr_genres[triple["tail_uri"]]))
+                        triple["head_uri"]]].append(genre_to_idx[triple["tail_uri"]])
 
         # now, we need to create a file containing movie information, as for MovieLens
         # the file will contain also the genres of the movies, as in MovieLens
@@ -405,6 +423,11 @@ class DataManager:
         user_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/user_mapping.csv"), index=False)
         item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
         item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
+
+        # save the file with the genres and corresponding indexes
+        mr_genre_idx_to_name = [{"genre_idx": idx, "name": name} for name, idx in genre_name_to_idx.items()]
+        mr_genre_idx_to_name= pd.DataFrame.from_records(mr_genre_idx_to_name)
+        mr_genre_idx_to_name.to_csv(os.path.join(self.data_path, "mindreader/processed/movie_genres.csv"), index=False)
 
     def create_mapping(self):
         """
@@ -697,7 +720,7 @@ class DataManager:
         # convert the array in a sparse matrix (items X genres)
         movie_genres_matrix = csr_matrix((np.ones(len(dataset_movie_to_genres)),
                                           (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
-                                         shape=(j, len(self.genres)))
+                                         shape=(j, len(self.mr_genre_to_idx)))
         # now, we need to associate each user to the genres she likes or dislikes - this info is only on MindReader
         # get ratings of users of MindReader for the genres
         mr_genre_ratings = [(rating["u_idx"], rating["g_idx"], rating["rate"])
@@ -766,7 +789,7 @@ class DataManager:
         # convert array to sparse matrix
         movie_genres_matrix = csr_matrix((np.ones(len(dataset_movie_to_genres)),
                                          (dataset_movie_to_genres[:, 0], dataset_movie_to_genres[:, 1])),
-                                         shape=(len(np.unique(ml_ratings[:, 1])), len(self.genres)))
+                                         shape=(len(np.unique(ml_ratings[:, 1])), len(self.mr_genre_to_idx)))
         # get genre ratings in MindReader
         mr_genre_ratings = np.array([(rating["u_idx"], rating["g_idx"], rating["rate"])
                                      for rating in self.mr_genre_ratings])
@@ -997,7 +1020,7 @@ class DataManager:
             # convert the array in a sparse matrix (items X genres)
             movie_genres_matrix = csr_matrix((np.ones(len(movie_to_genres)),
                                               (movie_to_genres[:, 0], movie_to_genres[:, 1])),
-                                             shape=(n_items, len(self.genres)))
+                                             shape=(n_items, len(self.mr_genre_to_idx)))
             # get ratings for movie genres
             genre_ratings = pd.DataFrame.from_records(self.mr_genre_ratings)
             genre_ratings = np.array(genre_ratings)
@@ -1012,7 +1035,7 @@ class DataManager:
             # the training set contains both ratings on movies and on movie genres
             return DatasetWithGenres(np.concatenate([train, new_genre_ratings], axis=0),
                                      validation, test, n_users, n_items,
-                                     name="mr(movies+genres)", n_genres=len(self.genres),
+                                     name="mr(movies+genres)", n_genres=len(self.mr_genre_to_idx),
                                      n_genre_ratings=len(new_genre_ratings), item_genres_matrix=movie_genres_matrix)
 
         return Dataset(train, validation, test, n_users, n_items, name="mr(movies)")
@@ -1071,7 +1094,7 @@ class DataManager:
             return DatasetWithGenres(np.concatenate([fusion_train, new_genre_ratings], axis=0),
                                      fusion_val, fusion_test, n_users, n_items,
                                      name="ml|mr(movies+genres)" if idx_mapping is not None else "ml(movies)|mr(genres)",
-                                     n_genres=len(self.genres), n_genre_ratings=len(new_genre_ratings),
+                                     n_genres=len(self.mr_genre_to_idx), n_genre_ratings=len(new_genre_ratings),
                                      item_genres_matrix=item_genres_matrix)
 
         return Dataset(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),

@@ -390,15 +390,15 @@ def run_sparsity_exp_mr(wandb_project, training_folds=tr_folds_mr, n_neg=100,
                           proportions_to_keep=proportions_to_keep)
 
 if __name__ == '__main__':
-    run_experiment(wandb_project='final-stable-100-ndcg',
-                   # evaluation_modes="ml\mr",
-                   # training_folds=("ml(movies)|mr(genres)", "ml|mr(movies+genres)"),  # , "ml(movies)|mr(genres)"
-                   # models="standard_mf",
-                   # proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),  # 1, 0.5, 0.2, 0.1, 0.05
-                   starting_seed=0, n_runs=30)
-    # run_sparsity_exp_mr(wandb_project='sparsity-exp-mr',
-    #                     proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),
-    #                     starting_seed=0, n_runs=2)
+    # run_experiment(wandb_project='final-stable-100-ndcg',
+    #                # evaluation_modes="ml\mr",
+    #                # training_folds=("ml(movies)|mr(genres)", "ml|mr(movies+genres)"),  # , "ml(movies)|mr(genres)"
+    #                # models="standard_mf",
+    #                # proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),  # 1, 0.5, 0.2, 0.1, 0.05
+    #                starting_seed=0, n_runs=30)
+    run_sparsity_exp_mr(wandb_project='sparsity-exp-mr',
+                        proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),
+                        starting_seed=0, n_runs=5)
     # todo fare anche il test con iper-parametri fissati per i modelli, provare con un numero variabile di fattori latenti
     # todo tipo testare a parita' di iper-parametri comuni come cambiano le performance
     # todo rifare esperimenti con aumento di sparsita'
