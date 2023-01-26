@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import gc
 import numpy as np
 from fuzzywuzzy import fuzz
 import random
@@ -48,24 +49,33 @@ from ltnrec.utils import set_seed
 #  gerarchia?
 
 class Dataset:
-    def __init__(self, train, val, test, n_users, n_items, name):
+    def __init__(self, train, val, test, n_users, n_items, n_movie_ratings, name):
         self.train = train
         self.val = val
         self.test = test
         self.n_users = n_users
         self.n_items = n_items
+        self.n_movie_ratings = n_movie_ratings
         self.name = name
+
+    def __repr__(self):
+        return "Dataset with n_users=%d, n_items=%s, n_movie_ratings=%d" % (self.n_users, self.n_items,
+                                                                            self.n_movie_ratings)
 
 
 class DatasetWithGenres(Dataset):
-    def __init__(self, train, val, test, n_users, n_items, name, n_genres, n_genre_ratings, item_genres_matrix=None):
-        super(DatasetWithGenres, self).__init__(train, val, test, n_users, n_items, name)
+    def __init__(self, train, val, test, n_users, n_items, n_movie_ratings, name, n_genres, n_genre_ratings,
+                 item_genres_matrix=None):
+        super(DatasetWithGenres, self).__init__(train, val, test, n_users, n_items, n_movie_ratings, name)
         self.n_genres = n_genres
         self.n_genre_ratings = n_genre_ratings
         self.item_genres_matrix = item_genres_matrix
 
     def set_item_genres_matrix(self, item_genres_matrix):
         self.item_genres_matrix = item_genres_matrix
+
+    def __repr__(self):
+        return "%s, n_genres=%d, n_genre_ratings=%d" % (super().__repr__(), self.n_genres, self.n_genre_ratings)
 
 
 def send_query(query):
@@ -168,16 +178,21 @@ class DataManager:
                                                                                           "movielens " \
                                                                                           "latest is missing"
 
-    def process_ml_100k(self, threshold=4):
+    def process_ml_100k(self, threshold=4, k_filer=None):
         """
         It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
         has rated multiple times the same movie (sometimes even with the same rating).
+        It binarizes the dataset with the given threshold. All ratings above the threshold are converted to 1, the
+        remaining ones to 0.
+        It filter users and items that have a number of interactions which is less than `k_filter`.
         It also recreates the indexing after these modifications have been done, in such a way the indexes are 
         in [0, n_movies].
         It creates new csv files without the duplicates, both u.data and u.item, with the new indexing.
 
         :param threshold: a threshold used to create implicit feedbacks from the explicit feedbacks of ml-100k. Ratings
         above the threshold are converted to 1, the others to 0.
+        :param k_filer: threshold used to filter user and items based on the number of interactions. It is used to make
+        the dataset more dense.
         """
         # get MovieLens-100k movies
         ml_100_movies_file = pd.read_csv(os.path.join(self.data_path, "ml-100k/u.item"), sep="|",
@@ -218,6 +233,19 @@ class DataManager:
         ml_ratings = ml_ratings.append(new_ratings)
         ml_ratings.reset_index()
         ml_100_movies_file.reset_index()
+        # filter users and items based on the number of ratings
+        if k_filer is not None:
+            tmp1 = ml_ratings.groupby([0], as_index=False)[1].count()
+            tmp1.rename(columns={1: 'cnt_item'}, inplace=True)
+            tmp2 = ml_ratings.groupby([1], as_index=False)[0].count()
+            tmp2.rename(columns={0: 'cnt_user'}, inplace=True)
+            ml_ratings = ml_ratings.merge(tmp1, on=[0]).merge(tmp2, on=[1])
+            ml_ratings = ml_ratings.query(f'cnt_item >= {k_filer} and cnt_user >= {k_filer}').reset_index(drop=True).copy()
+            ml_ratings.drop(['cnt_item', 'cnt_user'], axis=1, inplace=True)
+            movies_to_keep = set(ml_ratings[1])
+            ml_100_movies_file = ml_100_movies_file[ml_100_movies_file[0].isin(movies_to_keep)]
+            del tmp1, tmp2
+            gc.collect()
         # create new indexing for users and items of MovieLens-100k
         user_mapping = {}
         item_mapping = {}
@@ -928,7 +956,7 @@ class DataManager:
         train = ratings.to_dict("records")
         train = np.array([(rating[0], rating[1], rating[2]) for rating in train])
 
-        return Dataset(train, validation, test, n_users, n_items, name="ml")
+        return Dataset(train, validation, test, n_users, n_items, len(train), name="ml")
 
     def get_mr_folds(self, seed, n_neg=100, with_genres=False):
         """
@@ -1034,11 +1062,11 @@ class DataManager:
             new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
             # the training set contains both ratings on movies and on movie genres
             return DatasetWithGenres(np.concatenate([train, new_genre_ratings], axis=0),
-                                     validation, test, n_users, n_items,
+                                     validation, test, n_users, n_items, len(train),
                                      name="mr(movies+genres)", n_genres=len(self.mr_genre_to_idx),
                                      n_genre_ratings=len(new_genre_ratings), item_genres_matrix=movie_genres_matrix)
 
-        return Dataset(train, validation, test, n_users, n_items, name="mr(movies)")
+        return Dataset(train, validation, test, n_users, n_items, len(train), name="mr(movies)")
 
     def get_fusion_folds_given_ml_folds(self, train_set, ml_val, ml_test, idx_mapping=None, genre_ratings=None,
                                         item_genres_matrix=None):
@@ -1092,13 +1120,13 @@ class DataManager:
             new_genre_ratings = np.array([[u, g + n_movies, r] for u, g, r, in genre_ratings])
             # the training set contains both ratings on movies and on movie genres
             return DatasetWithGenres(np.concatenate([fusion_train, new_genre_ratings], axis=0),
-                                     fusion_val, fusion_test, n_users, n_items,
+                                     fusion_val, fusion_test, n_users, n_items, len(fusion_train),
                                      name="ml|mr(movies+genres)" if idx_mapping is not None else "ml(movies)|mr(genres)",
                                      n_genres=len(self.mr_genre_to_idx), n_genre_ratings=len(new_genre_ratings),
                                      item_genres_matrix=item_genres_matrix)
 
         return Dataset(fusion_train, fusion_val, fusion_test, train_set["u_idx"].nunique(),
-                       train_set["i_idx"].nunique(), name="ml|mr(movies)")
+                       train_set["i_idx"].nunique(), len(fusion_train), name="ml|mr(movies)")
 
     @staticmethod
     def increase_data_sparsity(dataset, p_to_keep, seed):
@@ -1122,13 +1150,17 @@ class DataManager:
                 # remove genre ratings to avoid removing them with the random sampling
                 genre_ratings = train_df[-dataset.n_genre_ratings:]
                 train_df = train_df[:-dataset.n_genre_ratings]
-            groups = train_df.groupby(by=["uid"])
+            movie_ratings = train_df
+            groups = movie_ratings.groupby(by=["uid"])
             for u_idx, u_ratings in groups:
                 ratings_to_remove = u_ratings.sample(frac=(1 - p_to_keep), random_state=seed)
-                train_df.drop(ratings_to_remove.index, inplace=True)
+                movie_ratings.drop(ratings_to_remove.index, inplace=True)
 
+            movie_ratings = movie_ratings.to_numpy()
+            # update the number of movie ratings after we have reduced the density of the dataset
+            dataset.n_movie_ratings = len(movie_ratings)
             if isinstance(dataset, DatasetWithGenres):
-                dataset.train = np.concatenate([train_df.to_numpy(), genre_ratings], axis=0)
+                dataset.train = np.concatenate([movie_ratings, genre_ratings], axis=0)
             else:
-                dataset.train = train_df.to_numpy()
+                dataset.train = movie_ratings
         return dataset

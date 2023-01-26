@@ -396,8 +396,9 @@ if __name__ == '__main__':
     #                # models="standard_mf",
     #                # proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),  # 1, 0.5, 0.2, 0.1, 0.05
     #                starting_seed=0, n_runs=30)
-    run_sparsity_exp_mr(wandb_project='sparsity-exp-mr',
+    run_sparsity_exp_mr(wandb_project='sparsity-exp-mr-more-genres',
                         proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),
+                        models=("ltn_mf_genres",),
                         starting_seed=0, n_runs=5)
     # todo fare anche il test con iper-parametri fissati per i modelli, provare con un numero variabile di fattori latenti
     # todo tipo testare a parita' di iper-parametri comuni come cambiano le performance
@@ -426,4 +427,6 @@ if __name__ == '__main__':
     # todo sbilanciamento del dataset puo' essere un problema
     # todo e' un problema anche il fatto di aggregare voti su film con voti su generi forse? forse non dovrebbero influenzarsi in quella maniera
     # todo quello che voglio provare a fare ora e' utilizzare l'info dei generi di MindReader invece di quella di ml-100k come info di base
+    # todo controllare se in mindreader ci sono almeno n rating per ogni user e n rating per ogni item
+    # todo provare ad usare hyperband per bloccare i training, anche se ho gia' early stopping
     # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si
