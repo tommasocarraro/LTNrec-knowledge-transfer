@@ -128,26 +128,26 @@ class DataManager:
                        "Western Film")
         # process MindReader
         if not os.path.exists(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv")):
-            self.process_mr()
+            self.process_mr(k_filter=10)
+        self.mr_genre_to_idx = pd.read_csv(os.path.join(self.data_path,
+                                                        "mindreader/processed/movie_genres.csv")).to_dict("records")
+        self.mr_genre_to_idx = {genre["name"]: genre["genre_idx"] for genre in self.mr_genre_to_idx}
         # process ml-100k
         if not os.path.exists(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv")):
-            self.process_ml_100k()
+            self.process_ml_100k(threshold=4, k_filter=10)
         # save the files which are mostly used by the pre-processing procedure
         self.ml_100_movie_info = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.item"),
-                                             encoding="iso-8859-1", header=None).to_dict("records")
+                                             encoding="iso-8859-1", header=None)  # .to_dict("records")
         self.ml_100_ratings = pd.read_csv(os.path.join(self.data_path, "ml-100k/processed/u.data"),
-                                          sep="\t", header=None).to_dict("records")
+                                          sep="\t", header=None)  # .to_dict("records")
         self.mr_movie_info = pd.read_csv(os.path.join(self.data_path,
                                                       "mindreader/processed/movies.csv")).to_dict("records")
         self.mr_movie_ratings = pd.read_csv(os.path.join(self.data_path,
                                                          "mindreader/processed/movie_ratings.csv")).to_dict("records")
         self.mr_genre_ratings = pd.read_csv(os.path.join(self.data_path,
                                                          "mindreader/processed/genre_ratings.csv")).to_dict("records")
-        self.mr_genre_to_idx = pd.read_csv(os.path.join(self.data_path,
-                                                        "mindreader/processed/movie_genres.csv")).to_dict("records")
-        self.mr_genre_to_idx = {genre["name"]: genre["genre_idx"] for genre in self.mr_genre_to_idx}
         # create the match between the movies of ml-100k and the movies of MindReader
-        self.ml_to_mr = self.create_mapping()
+        # self.ml_to_mr = self.create_mapping()
 
     def check(self):
         """
@@ -178,7 +178,7 @@ class DataManager:
                                                                                           "movielens " \
                                                                                           "latest is missing"
 
-    def process_ml_100k(self, threshold=4, k_filer=None):
+    def process_ml_100k(self, threshold=4, k_filter=None):
         """
         It removes duplicates in the ml-100k dataset. Some movies appear with different indexes because the same user
         has rated multiple times the same movie (sometimes even with the same rating).
@@ -191,7 +191,7 @@ class DataManager:
 
         :param threshold: a threshold used to create implicit feedbacks from the explicit feedbacks of ml-100k. Ratings
         above the threshold are converted to 1, the others to 0.
-        :param k_filer: threshold used to filter user and items based on the number of interactions. It is used to make
+        :param k_filter: threshold used to filter user and items based on the number of interactions. It is used to make
         the dataset more dense.
         """
         # get MovieLens-100k movies
@@ -234,13 +234,13 @@ class DataManager:
         ml_ratings.reset_index()
         ml_100_movies_file.reset_index()
         # filter users and items based on the number of ratings
-        if k_filer is not None:
+        if k_filter is not None:
             tmp1 = ml_ratings.groupby([0], as_index=False)[1].count()
             tmp1.rename(columns={1: 'cnt_item'}, inplace=True)
             tmp2 = ml_ratings.groupby([1], as_index=False)[0].count()
             tmp2.rename(columns={0: 'cnt_user'}, inplace=True)
             ml_ratings = ml_ratings.merge(tmp1, on=[0]).merge(tmp2, on=[1])
-            ml_ratings = ml_ratings.query(f'cnt_item >= {k_filer} and cnt_user >= {k_filer}').reset_index(drop=True).copy()
+            ml_ratings = ml_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}').reset_index(drop=True)
             ml_ratings.drop(['cnt_item', 'cnt_user'], axis=1, inplace=True)
             movies_to_keep = set(ml_ratings[1])
             ml_100_movies_file = ml_100_movies_file[ml_100_movies_file[0].isin(movies_to_keep)]
@@ -300,18 +300,29 @@ class DataManager:
         item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
         item_mapping_file.to_csv(os.path.join(self.data_path, "ml-100k/processed/item_mapping.csv"), index=False)
 
-    def process_mr(self):
+    @staticmethod
+    def get_train_test_split(data, test_size=0.2, seed=None):
+        test_index = data.groupby(by=[0]).apply(
+            lambda x: x.sample(frac=test_size, random_state=seed).index).explode().values.astype("int64")
+        train_index = np.setdiff1d(data.index.values, test_index)
+        return data.iloc[train_index, :].reset_index(), data.iloc[test_index, :].reset_index()
+
+    def process_mr(self, k_filter=None):
         """
         It processes the MindReader dataset by removing duplicated titles. There could be cases in which the title is
         the same even if the movies are slightly different, for example they have a different publication year.
         To remove duplicates, we add the publication date to the title of the movies (in brackets), as for the MovieLens
         datasets.
+        This procedure also filters the dataset by removing the unknown ratings (ratings at 0) and changing negative
+        ratings from -1 to 0.
+        This procedure removes all the users and items with less than `k_filter` interactions.
         After these modifications have been done, it recreates the indexing of MindReader by substituting entity URIs
         with proper indexes in [0, n_movies]. The same is done for the user identifiers, which are also represented
         using strings in MindReader.
-        This procedure also filters the dataset by removing the unknown ratings (ratings at 0) and changing negative
-        ratings from -1 to 0.
+
         At the end of the procedure, new files with proper modifications and indexing are created.
+
+        :param k_filter: threshold used to filter users and items with less than k interactions.
         """
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
@@ -348,6 +359,23 @@ class DataManager:
         mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
         mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
+        # get mr movie ratings and filter users and items based on k_filter parameter - unknown ratings are removed
+        mr_movie_ratings = mr_ratings[
+            mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+        # todo forse per MindReader dobbiamo selezionare sia rating su generi che su film con il k filter?
+        # todo se facciamo prima su film e poi su generi, puo' essere che un utente che ha votato 3 film viene
+        #  inizialmente cancellato e poi rimesso e compare che ha votato solo generi, mentre aveva votato anche film
+        # if k_filter is not None:
+        #     tmp1 = mr_movie_ratings.groupby(["userId"], as_index=False)["uri"].count()
+        #     tmp1.rename(columns={"uri": 'cnt_item'}, inplace=True)
+        #     tmp2 = mr_movie_ratings.groupby(["uri"], as_index=False)["userId"].count()
+        #     tmp2.rename(columns={"userId": 'cnt_user'}, inplace=True)
+        #     mr_movie_ratings = mr_movie_ratings.merge(tmp1, on=["userId"]).merge(tmp2, on=["uri"])
+        #     mr_movie_ratings = mr_movie_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}').reset_index(
+        #         drop=True).copy()
+        #     mr_movie_ratings.drop(['cnt_item', 'cnt_user'], axis=1, inplace=True)
+        #     del tmp1, tmp2
+        #     gc.collect()
         # we want ratings only for the allowed genres - we create a mapping between URIs and genre names
         # for allowed genres
         mr_genres = {entity["uri"]: entity["name"] for entity in mr_entities_dict if "Genre" in entity["labels"]}
@@ -368,9 +396,7 @@ class DataManager:
                 g_idx += 1
         # create genre_name_to_idx dict for matching genres of ml-100k movies
         genre_name_to_idx = {mr_genres[uri]: idx for uri, idx in genre_to_idx.items()}
-        # remove unknown movie ratings
-        mr_movie_ratings = mr_ratings[
-            mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0].reset_index().to_dict("records")
+
         u = i = 0
         user_mapping = {}
         item_mapping = {}

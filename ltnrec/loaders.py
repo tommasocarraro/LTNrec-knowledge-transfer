@@ -187,3 +187,37 @@ class ValDataLoader:
             ground_truth[:, -1] = 1
 
             yield torch.tensor(data), ground_truth
+
+
+class ValDataLoaderRandomSplit:
+    """
+    Data loader to load the validation/test set of the MindReader dataset.
+    """
+
+    def __init__(self,
+                 train_u_i_matrix,
+                 test_u_i_matrix,
+                 batch_size=1):
+        """
+        Constructor of the validation data loader.
+        :param data: matrix of user-item pairs. Every row is a user, where the last position contains the positive
+        user-item pair, while the first 100 positions contain the negative user-item pairs
+        :param batch_size: batch size for the validation/test of the model
+        """
+        self.train_u_i_matrix = train_u_i_matrix
+        self.test_u_i_matrix = test_u_i_matrix
+        self.n_users = train_u_i_matrix.shape[0]
+        self.n_items = train_u_i_matrix.shape[1]
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return int(np.ceil(self.n_users / self.batch_size))
+
+    def __iter__(self):
+        for _, start_idx in enumerate(range(0, self.n_users, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, self.n_users)
+            ground_truth = self.test_u_i_matrix[start_idx:end_idx]
+            mask = self.train_u_i_matrix[start_idx:end_idx]
+
+            yield torch.tensor([[[u, i] for i in range(self.n_items)] for u in range(start_idx, end_idx)]), \
+                  ground_truth.toarray(), mask.toarray()

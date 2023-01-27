@@ -217,9 +217,9 @@ class MFTrainer(Trainer):
 
     def validate(self, val_loader, val_metric):
         val_score = []
-        for batch_idx, (data, ground_truth) in enumerate(val_loader):
+        for batch_idx, (data, ground_truth, mask) in enumerate(val_loader):
             predicted_scores = self.predict(data.view(-1, 2))
-            val_score.append(compute_metric(val_metric, predicted_scores.view(ground_truth.shape).numpy(),
+            val_score.append(compute_metric(val_metric, np.where(mask == 1, -np.Inf, predicted_scores.view(ground_truth.shape).numpy()),
                                             ground_truth))
         return np.mean(np.concatenate(val_score))
 
@@ -229,10 +229,11 @@ class MFTrainer(Trainer):
             metrics = [metrics]
 
         results = {m: [] for m in metrics}
-        for batch_idx, (data, ground_truth) in enumerate(test_loader):
+        for batch_idx, (data, ground_truth, mask) in enumerate(test_loader):
             for m in results:
                 predicted_scores = self.predict(data.view(-1, 2))
-                results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
+                results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
+                                                 ground_truth))
         for m in results:
             results[m] = np.mean(np.concatenate(results[m]))
         return results
