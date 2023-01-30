@@ -1,11 +1,6 @@
 import numpy as np
 import torch
 import ltn
-# todo usare one-hot per i generi e usare una rete che predice lo score
-# todo creare un val set anche per i generi
-# todo aggiungere la formula 2 e vedere se porta a miglioramenti, soprattutto sui casi di cold start
-# todo provare a rendere piu' sparso ml-100k e far vedere che i rating di mindreader aiutano -> interessante (stesso
-#  studio che abbiamo fatto sull'altro paper)
 
 
 class TrainingDataLoaderLTN:

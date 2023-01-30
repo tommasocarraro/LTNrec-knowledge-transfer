@@ -91,7 +91,6 @@ class Trainer:
 
         for epoch in range(n_epochs):
             # training step
-            # todo pensare se e' piu' carino ritornare il log dict oppure fare il log con il commit di wandb
             train_loss, log_dict = self.train_epoch(train_loader)
             # validation step
             val_score = self.validate(val_loader, val_metric)
@@ -362,16 +361,7 @@ class Model:
         with open("./config/%s.json" % self.model_name) as json_file:
             self.param_config = json.load(json_file)
 
-    def grid_search(self, data, seed, save_path_prefix):
-        """
-        It performs a grid search of the model, with hyper-parameters specified in the corresponding config file.
-        It creates a JSON file containing the best configuration of hyper-parameters.
-        prefix of the path where to save the weights of the best model. It is also the prefix
-        of the path where to save the best hyper-parameters configuration.
-        """
-        pass
-
-    def grid_search_wandb(self, dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project):
+    def grid_search(self, dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project):
         """
         It performs a grid search of the model using a Weights and Biases sweep.
         The dataset_id is used to set the seed for the experiment and also for downloading the dataset artifact from
@@ -389,14 +379,6 @@ class Model:
         :param wandb_project: name of the wandb project
         :return:
         """
-        # try:
-        #     # check if a best configuration artifact for this model and dataset already exists
-        #     api.artifact("%s/config-model=%s-dataset=%s:latest" % (wandb_project, self.model_name,
-        #                                                            dataset_id))
-        #     print("Grid search for model=%s-dataset=%s has been already performed. Find the config"
-        #           "artifact at config/config-model=%s-dataset=%s" % (self.model_name, dataset_id, self.model_name,
-        #                                                              dataset_id))
-        # except wandb.errors.CommError:
         # check if a best configuration file for this model and dataset already exists
         if os.path.exists("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix,
                                                                   self.model_name, dataset_id)):
@@ -427,8 +409,8 @@ class Model:
                     self.grid_search_train(run, dataset_id, dataset)
 
             # set seed for reproducible experiments
-            # todo qua non ha senso il seed, tanto non funziona sugli sweep, e non ha senso riprodurre la grid search
-            # todo il problema e' sulla riproducibilita' degli esperimenti in parallelo, si setta un seed globale, quindi non so come funzioni
+            # todo qua non ha senso il seed, tanto non funziona sugli sweep, pero' almeno so con che seed riprodurre
+            #  la specifica run
             set_seed(int(dataset_id.split("_")[-1]))  # the seed is the last information in every dataset name
             # run the wandb agent that will perform the sweep
             wandb.agent(sweep_id, function=single_run, count=self.param_config["search_n_iter"])
@@ -442,22 +424,6 @@ class Model:
             with open("%s/config-model=%s-dataset=%s.json" % (local_config_path_prefix, self.model_name,
                                                               dataset_id), "w") as outfile:
                 json.dump(best_config, outfile, indent=4)
-            # # create artifact with best configuration
-            # print("Creating model config artifact config-model=%s-dataset=%s on project %s" % (self.model_name,
-            #                                                                                    dataset_id,
-            #                                                                                    wandb_project))
-            # with wandb.init(project=wandb_project,
-            #                 job_type="upload_best_model_config",
-            #                 reinit=True,
-            #                 id="ciao2",
-            #                 name="upload_best_model_config:model=%s-dataset=%s" % (self.model_name,
-            #                                                                        dataset_id)) as upload_run:
-            #     print(upload_run.id)
-            #     config_artifact = wandb.Artifact("config-model=%s-dataset=%s" % (self.model_name, dataset_id),
-            #                                      type="model_config")
-            #     config_artifact.add_file("%s/%s.json" % (local_config_path_prefix,
-            #                                              "config-model=%s-dataset=%s" % (self.model_name, dataset_id)))
-            #     upload_run.log_artifact(config_artifact)
 
     def grid_search_train(self, wandb_run, dataset_id, data):
         """
@@ -472,8 +438,8 @@ class Model:
         """
         pass
 
-    def train_model_wandb(self, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
-                          local_model_path_prefix, wandb_project):
+    def train(self, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+              local_model_path_prefix, wandb_project):
         """
         It performs the training of the model with the best configuration of hyper-parameters found using a grid search.
         If a best configuration wandb artifact does not exist for this model already, the method automatically calls the
@@ -500,8 +466,6 @@ class Model:
         :param wandb_project: name of the wandb project
         :return:
         """
-        # todo gli si da il nome di un artifact di configurazione oppure un dizionario di configurazione
-        # todo quindi in pratica decido io come fare training, cosi ho massima flessibilita'
         # check if a best model file for this model already exists, it is not necessary to train it another time
         if os.path.exists(os.path.join(local_model_path_prefix, "model-model=%s-dataset=%s.pth" % (self.model_name,
                                                                                                    dataset_id))):
@@ -553,8 +517,8 @@ class Model:
         """
         pass
 
-    def test_model_wandb(self, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
-                         local_model_path_prefix, local_result_path_prefix, wandb_project):
+    def test(self, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+             local_model_path_prefix, local_result_path_prefix, wandb_project):
         """
         It tests the performances of a trained model on the test set. After the test of the model has been done, it
         creates a wandb artifact that contains a JSON file reporting the test metrics.
@@ -618,14 +582,6 @@ class Model:
         """
         pass
 
-    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
-        """
-        It trains and tests the model. To train the model, it uses the hyper-parameters specified in the config file
-        created by the grid_search() method. If this file does not exist, it runs a grid search to find the best
-        hyper-parameters and then trains the model with the best hyper-parameters.
-        """
-        pass
-
 
 class StandardMFModel(Model):
     """
@@ -684,82 +640,6 @@ class StandardMFModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-
-    def grid_search(self, data, seed, save_path_prefix):
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            set_seed(seed)
-            best_score = 0.0
-            val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
-            for k in self.param_config["k"]:
-                for biased in self.param_config["biased"]:
-                    for lr in self.param_config["lr"]:
-                        for wd in self.param_config["wd"]:
-                            for tr_batch_size in self.param_config["tr_batch_size"]:
-                                print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, batch_size=%d" %
-                                      (self.model_name, save_path_prefix, k, biased, lr, wd, tr_batch_size))
-                                # train model with current configuration
-                                model = MatrixFactorization(data.n_users, data.n_items, k, biased)
-                                tr_loader = TrainingDataLoader(data.train, tr_batch_size)
-                                trainer = MFTrainer(model, Adam(model.parameters(), lr=lr, weight_decay=wd))
-                                trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                                              n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
-                                              verbose=self.param_config["verbose"],
-                                              save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                                self.model_name),
-                                              model_name="grid_search:%s-%s" % (save_path_prefix, self.model_name))
-                                # load best weights for current configuration
-                                trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                           self.model_name))
-                                # get validation score for best weights
-                                val_score = trainer.test(val_loader,
-                                                         self.param_config["val_metric"])[self.param_config["val_metric"]]
-                                # check if it is the best score found
-                                if val_score > best_score:
-                                    # update best score
-                                    best_score = val_score
-                                    # save best configuration of parameters
-                                    config_dict = {
-                                        "k": k,
-                                        "biased": biased,
-                                        "lr": lr,
-                                        "wd": wd,
-                                        "tr_batch_size": tr_batch_size
-                                    }
-                                    with open("./config/best_config/%s-%s.json"
-                                              % (save_path_prefix, self.model_name), "w") as outfile:
-                                        json.dump(config_dict, outfile, indent=4)
-
-    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
-        if not os.path.exists("./saved_models/seed_%d" % seed):
-            os.mkdir("./saved_models/seed_%d" % seed)
-        # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            # we compute the grid search
-            self.grid_search(data, seed, save_path_prefix)
-        # load best configuration of hyper-parameters
-        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
-            best_config = json.load(json_file)
-        set_seed(seed)
-        # train the model with the best configuration
-        model = MatrixFactorization(data.n_users, data.n_items, best_config['k'], best_config['biased'])
-        tr_loader = TrainingDataLoader(data.train, best_config['tr_batch_size'])
-        val_loader = ValDataLoader(data.val, batch_size=self.param_config['val_batch_size'])
-        test_loader = ValDataLoader(data.test, batch_size=self.param_config['val_batch_size'])
-        trainer = MFTrainer(model, Adam(model.parameters(), lr=best_config['lr'], weight_decay=best_config['wd']))
-        # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
-            trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                          n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
-                          verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
-        # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
-        # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
-                              trainer.test(test_loader, self.param_config["test_metrics"]), seed)
 
 
 class LTNMFModel(Model):
@@ -825,87 +705,6 @@ class LTNMFModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-
-    def grid_search(self, data, seed, save_path_prefix):
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            set_seed(seed)
-            best_score = 0.0
-            val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
-            for k in self.param_config["k"]:
-                for biased in self.param_config["biased"]:
-                    for lr in self.param_config["lr"]:
-                        for wd in self.param_config["wd"]:
-                            for tr_batch_size in self.param_config["tr_batch_size"]:
-                                for alpha in self.param_config["alpha"]:
-                                    print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, "
-                                          "batch_size=%d, alpha=%.3f" % (self.model_name, save_path_prefix, k, biased,
-                                                                         lr, wd, tr_batch_size, alpha))
-                                    # train model with current configuration
-                                    model = MatrixFactorization(data.n_users, data.n_items, k, biased)
-                                    tr_loader = TrainingDataLoaderLTN(data.train, tr_batch_size)
-                                    trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=lr, weight_decay=wd), alpha)
-                                    trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                                                  n_epochs=self.param_config["n_epochs"],
-                                                  early=self.param_config["early_stop"],
-                                                  verbose=self.param_config["verbose"],
-                                                  save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                                    self.model_name),
-                                                  model_name="grid_search:%s-%s" % (save_path_prefix, self.model_name))
-                                    # load best weights for current configuration
-                                    trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                               self.model_name))
-                                    # get validation score for best weights
-                                    val_score = trainer.test(val_loader,
-                                                             self.param_config["val_metric"])[self.param_config["val_metric"]]
-                                    # check if it is the best score found
-                                    if val_score > best_score:
-                                        # update best score
-                                        best_score = val_score
-                                        # save best configuration of parameters
-                                        config_dict = {
-                                            "k": k,
-                                            "biased": biased,
-                                            "lr": lr,
-                                            "wd": wd,
-                                            "tr_batch_size": tr_batch_size,
-                                            "alpha": alpha
-                                        }
-                                        with open("./config/best_config/%s-%s.json"
-                                                  % (save_path_prefix, self.model_name), "w") as outfile:
-                                            json.dump(config_dict, outfile, indent=4)
-
-    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
-        if not os.path.exists("./saved_models/seed_%d" % seed):
-            os.mkdir("./saved_models/seed_%d" % seed)
-        # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            # we compute the grid search
-            self.grid_search(data, seed, save_path_prefix)
-        # load best configuration of hyper-parameters
-        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
-            best_config = json.load(json_file)
-        set_seed(seed)
-        # train the model with the best configuration
-        model = MatrixFactorization(data.n_users, data.n_items, best_config['k'], best_config['biased'])
-        tr_loader = TrainingDataLoaderLTN(data.train, best_config['tr_batch_size'])
-        val_loader = ValDataLoader(data.val, batch_size=self.param_config['val_batch_size'])
-        test_loader = ValDataLoader(data.test, batch_size=self.param_config['val_batch_size'])
-        trainer = LTNTrainerMF(model, Adam(model.parameters(), lr=best_config['lr'], weight_decay=best_config['wd']),
-                               best_config["alpha"])
-        # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
-            trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                          n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
-                          verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
-        # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
-        # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
-                              trainer.test(test_loader, self.param_config["test_metrics"]), seed)
 
 
 class LTNMFGenresModel(Model):
@@ -986,95 +785,3 @@ class LTNMFGenresModel(Model):
         with open("%s/result-model=%s-dataset=%s.json" % (local_result_path_prefix,
                                                           self.model_name, dataset_id), "w") as outfile:
             json.dump(metrics_dict, outfile, indent=4)
-
-    def grid_search(self, data, seed, save_path_prefix):
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            set_seed(seed)
-            best_score = 0.0
-            val_loader = ValDataLoader(data.val, self.param_config['val_batch_size'])
-            print("Starting grid search of model %s on %s" % (self.model_name, save_path_prefix))
-            for k in self.param_config["k"]:
-                for biased in self.param_config["biased"]:
-                    for lr in self.param_config["lr"]:
-                        for wd in self.param_config["wd"]:
-                            for tr_batch_size in self.param_config["tr_batch_size"]:
-                                for alpha in self.param_config["alpha"]:
-                                    for p in self.param_config["p"]:
-                                        print("Training %s on %s with config: k=%d, biased=%d, lr=%.3f, wd=%.4f, "
-                                              "batch_size=%d, alpha=%.3f, p=%d" % (self.model_name, save_path_prefix, k,
-                                                                                   biased, lr, wd, tr_batch_size, alpha, p))
-                                        # train model with current configuration
-                                        model = MatrixFactorization(data.n_users, data.n_items, k, biased)
-                                        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users,
-                                                                                data.n_items - data.n_genres,
-                                                                                data.n_genres, genre_sample_size=5,
-                                                                                batch_size=tr_batch_size)
-                                        trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=lr,
-                                                                                 weight_decay=wd), alpha, p,
-                                                                     data.n_items - data.n_genres,
-                                                                     data.item_genres_matrix)
-                                        trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                                                      n_epochs=self.param_config["n_epochs"],
-                                                      early=self.param_config["early_stop"],
-                                                      verbose=self.param_config["verbose"],
-                                                      save_path="./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                                        self.model_name),
-                                                      model_name="grid_search:%s-%s" % (save_path_prefix,
-                                                                                        self.model_name))
-                                        # load best weights for current configuration
-                                        trainer.load_model("./saved_models/temporary/%s-%s.pth" % (save_path_prefix,
-                                                                                                   self.model_name))
-                                        # get validation score for best weights
-                                        val_score = trainer.test(val_loader,
-                                                                 self.param_config["val_metric"])[self.param_config["val_metric"]]
-                                        # check if it is the best score found
-                                        if val_score > best_score:
-                                            # update best score
-                                            best_score = val_score
-                                            # save best configuration of parameters
-                                            config_dict = {
-                                                "k": k,
-                                                "biased": biased,
-                                                "lr": lr,
-                                                "wd": wd,
-                                                "tr_batch_size": tr_batch_size,
-                                                "alpha": alpha,
-                                                "p": p
-                                            }
-                                            with open("./config/best_config/%s-%s.json"
-                                                      % (save_path_prefix, self.model_name), "w") as outfile:
-                                                json.dump(config_dict, outfile, indent=4)
-
-    def run_experiment(self, data, seed, save_path_prefix, result_file_name):
-        if not os.path.exists("./saved_models/seed_%d" % seed):
-            os.mkdir("./saved_models/seed_%d" % seed)
-        # check if a grid search is needed
-        if not os.path.exists("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)):
-            # we compute the grid search
-            self.grid_search(data, seed, save_path_prefix)
-        # load best configuration of hyper-parameters
-        with open("./config/best_config/%s-%s.json" % (save_path_prefix, self.model_name)) as json_file:
-            best_config = json.load(json_file)
-        set_seed(seed)
-        # train the model with the best configuration
-        model = MatrixFactorization(data.n_users, data.n_items, best_config['k'], best_config['biased'])
-        tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items - data.n_genres, data.n_genres,
-                                                genre_sample_size=5, batch_size=best_config["tr_batch_size"])
-        val_loader = ValDataLoader(data.val, batch_size=self.param_config['val_batch_size'])
-        test_loader = ValDataLoader(data.test, batch_size=self.param_config['val_batch_size'])
-        trainer = LTNTrainerMFGenres(model, Adam(model.parameters(), lr=best_config['lr'],
-                                                 weight_decay=best_config['wd']), best_config["alpha"], best_config["p"],
-                                     data.n_items - data.n_genres, data.item_genres_matrix)
-        # check if the model has been already trained before
-        if not os.path.exists("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name)):
-            print("Starting training of %s on %s with seed %d" % (self.model_name, save_path_prefix, seed))
-            trainer.train(tr_loader, val_loader, self.param_config["val_metric"],
-                          n_epochs=self.param_config["n_epochs"], early=self.param_config["early_stop"],
-                          verbose=self.param_config["verbose"],
-                          save_path="./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name),
-                          model_name="%s-%s-seed_%d" % (save_path_prefix, self.model_name, seed))
-        # load best weights of the model trained with best config
-        trainer.load_model("./saved_models/seed_%d/%s-%s.pth" % (seed, save_path_prefix, self.model_name))
-        # test the model and save the results
-        append_to_result_file(result_file_name, "%s-%s" % (save_path_prefix, self.model_name),
-                              trainer.test(test_loader, self.param_config["test_metrics"]), seed)

@@ -1,15 +1,8 @@
-import copy
-
 import torch
 import numpy as np
 import random
-# from ltnrec.models import StandardMFModel, LTNMFModel, LTNMFGenresModel
-# from ltnrec.loaders import TrainingDataLoader, ValDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres
-# from ltnrec.data import DataManager, DatasetWithGenres
-# from torch.optim import Adam
 import json
 import os
-import wandb
 
 
 def set_seed(seed):
@@ -24,21 +17,6 @@ def set_seed(seed):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def remove_prop_and_seed_from_dataset_name(dataset_name):
-    """
-    It remove the proportion of training ratings and seed from the dataset name.
-
-    :param dataset_name: name of the dataset
-    :return:
-    """
-    name = dataset_name.split("-")
-    if len(name) == 5:
-        # we remove the proportion only if there is
-        name = name[:-2] + [name[-1]]
-    name = "-".join(name)
-    return "_".join(name.split("_")[:-1]) + "_"
-
-
 def remove_seed_from_dataset_name(dataset_name):
     """
     It remove the seed from the dataset name.
@@ -47,23 +25,6 @@ def remove_seed_from_dataset_name(dataset_name):
     :return:
     """
     return "_".join(dataset_name.split("_")[:-1]) + "_"
-
-
-def reset_wandb_env():
-    """
-    It resets the wandb enviromet variables.
-
-    It has to be used when multiple wandb.init() are used inside the same function. You have just to call this function
-    after you run is finished. Then, you can start the next run.
-    """
-    exclude = {
-        "WANDB_PROJECT",
-        "WANDB_ENTITY",
-        "WANDB_API_KEY",
-    }
-    for k, v in os.environ.items():
-        if k.startswith("WANDB_") and k not in exclude:
-            del os.environ[k]
 
 
 def append_to_result_file(file_name, experiment_name, result, seed):
@@ -274,131 +235,3 @@ def generate_report_table(report_dict,
     table += "\end{tabular}\n"
     table += "\end{table*}"
     print(table)
-
-
-
-
-
-# def run_experiment_with_seed(seed, evaluation_modes, training_folds, models, exp_name):
-#     """
-#     Run a full experiment with a given seed.
-#     :param seed: seed for reproducibility of experiments
-#     :param evaluation_modes: list of evaluation modes for which the experiment has to be performed ("ml",
-#     "ml\mr", "ml&mr")
-#     :param training_folds: list of training datasets for which the experiment has to be performed ("ml",
-#     "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)")
-#     :param models: list of model on which the experiment has to be performed ("standard_mf", "ltn_mf", "ltn_mf_genres")
-#     :param exp_name: name of experiment
-#     """
-#     # check if specified training folds are correct
-#     assert all([fold in ["ml", "ml|mr(movies)", "ml|mr(movies+genres)", "ml(movies)|mr(genres)"]
-#                 for fold in training_folds]), "One of the specified training folds is wrong."
-#     # check if specified evaluation procedures are correct
-#     assert all([mode in ["ml", "ml\mr", "ml&mr"] for mode in evaluation_modes]), "One of the specified evaluation " \
-#                                                                                  "procedures is wrong."
-#     assert all([model in ["standard_mf", "ltn_mf", 'ltn_mf_genres'] for model in models]), "One of the specified " \
-#                                                                                            "models is wrong."
-#     # create dataset manager
-#     data_manager = DataManager("./datasets")
-#     if "ml|mr(movies)" in training_folds:
-#         # get dataset that is the union of ml and mr
-#         movie_ratings, movie_genres_matrix, genre_ratings, idx_mapping = data_manager.get_ml_union_mr_dataset()
-#     if "ml|mr(movies+genres)" in training_folds or "ml(movies)|mr(genres)" in training_folds:
-#         # get dataset that is the union of movie ratings of ml and genre ratings of mr
-#         g_movie_ratings, g_movie_genres_matrix, g_genre_ratings = data_manager.get_ml_union_mr_genre_ratings_dataset()
-#     # for each evaluation mode, run the experiment
-#     for mode in evaluation_modes:
-#         # prepare datasets for given mode
-#         datasets = []
-#         # get ml-100k folds
-#         ml = data_manager.get_ml100k_folds(seed, mode, n_neg=200)
-#         if "ml" in training_folds:
-#             datasets.append(ml)
-#         if "ml|mr(movies)" in training_folds:
-#             datasets.append(data_manager.get_fusion_folds_given_ml_folds(movie_ratings, ml.val, ml.test, idx_mapping))
-#         if "ml|mr(movies+genres)" in training_folds:
-#             data = data_manager.get_fusion_folds_given_ml_folds(movie_ratings, ml.val, ml.test, idx_mapping,
-#                                                                 genre_ratings=genre_ratings)
-#             data.set_item_genres_matrix(movie_genres_matrix)
-#             datasets.append(data)
-#         if "ml(movies)|mr(genres)" in training_folds:
-#             data = data_manager.get_fusion_folds_given_ml_folds(g_movie_ratings, ml.val, ml.test,
-#                                                                 genre_ratings=g_genre_ratings)
-#             data.set_item_genres_matrix(g_movie_genres_matrix)
-#             datasets.append(data)
-#         # for each dataset, I have to perform the experiment
-#         for dataset in datasets:
-#             if "standard_mf" in models:
-#                 standard_mf = StandardMFModel("%s-%s" % (mode, dataset.name))
-#                 standard_mf.run_experiment(dataset, seed, exp_name)
-#             if "ltn_mf" in models:
-#                 ltn_mf = LTNMFModel("%s-%s" % (mode, dataset.name))
-#                 ltn_mf.run_experiment(dataset, seed, exp_name)
-#             if "ltn_mf_genres" in models:
-#                 ltn_mf_genres = LTNMFGenresModel("%s-%s" % (mode, dataset.name))
-#                 if isinstance(dataset, DatasetWithGenres):
-#                     ltn_mf_genres.run_experiment(dataset, seed, exp_name)
-
-
-# def train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name):
-#     """
-#     It trains and tests a model.
-#     """
-#     trainer.train(tr_loader, val_loader, "hit@10", n_epochs=100, early=10, verbose=1,
-#                   save_path="./saved_models/%s.pth" % (experiment_name,))
-#     trainer.load_model("./saved_models/%s.pth" % (experiment_name,))
-#     result = trainer.test(test_loader, test_metrics)
-#     append_to_result_file(result_file_name, experiment_name, result)
-#
-#
-# def train_standard_mf(data, test_metrics, seed, experiment_name, result_file_name):
-#     """
-#     It trains and tests a standard MF model.
-#     """
-#     with open("./config/standard_mf.json") as json_file:
-#         config = json.load(json_file)
-#     set_seed(seed)
-#     mf_model = MatrixFactorization(data.n_users, data.n_items, config['k'], config['biased'])
-#     tr_loader = TrainingDataLoader(data.train, config['tr_batch_size'])
-#     val_loader = ValDataLoader(data.val, config['val_batch_size'])
-#     test_loader = ValDataLoader(data.test, config['val_batch_size'])
-#     trainer = MFTrainer(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']))
-#     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
-#
-#
-# def train_ltn_mf(data, test_metrics, seed, experiment_name, result_file_name):
-#     """
-#     It trains and tests a MF model trained using an LTN.
-#     """
-#     with open("./config/ltn_mf.json") as json_file:
-#         config = json.load(json_file)
-#     set_seed(seed)
-#     mf_model = MatrixFactorization(data.n_users, data.n_items, config['k'], config['biased'])
-#     tr_loader = TrainingDataLoaderLTN(data.train, config['tr_batch_size'])
-#     val_loader = ValDataLoader(data.val, config['val_batch_size'])
-#     test_loader = ValDataLoader(data.test, config['val_batch_size'])
-#     trainer = LTNTrainerMF(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']),
-#                            alpha=config['alpha'])
-#     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
-#
-#
-# def train_ltn_mf_genres(data, test_metrics, seed, experiment_name, result_file_name):
-#     """
-#     It trains and tests a MF model trained using an LTN which adds also a formula to reason about the
-#     genres of the movies.
-#     """
-#     with open("./config/ltn_mf_genres.json") as json_file:
-#         config = json.load(json_file)
-#     set_seed(seed)
-#     mf_model = MatrixFactorization(data.n_users, data.n_items, config['k'], config['biased'])
-#     # here, we pass n_items - n_genres because in this MF model the items include also the movie genres but
-#     # the loader needs to know the number of movies (items without genres)
-#     tr_loader = TrainingDataLoaderLTNGenres(data.train, data.n_users, data.n_items - data.n_genres, data.n_genres,
-#                                             genre_sample_size=5, batch_size=config['tr_batch_size'])
-#     val_loader = ValDataLoader(data.val, config['val_batch_size'])
-#     test_loader = ValDataLoader(data.test, config['val_batch_size'])
-#     # also the trainer needs to know the exact number of movies (n_items - n_genres)
-#     trainer = LTNTrainerMFGenres(mf_model, Adam(mf_model.parameters(), lr=config['lr'], weight_decay=config['wd']),
-#                                  alpha=config['alpha'], p=config['p'],
-#                                  n_movies=data.n_items - data.n_genres, item_genres_matrix=data.item_genres_matrix)
-#     train_and_test(trainer, tr_loader, val_loader, test_loader, test_metrics, result_file_name, experiment_name)
