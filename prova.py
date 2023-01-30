@@ -426,4 +426,5 @@ if __name__ == '__main__':
     # todo sbilanciamento del dataset puo' essere un problema
     # todo e' un problema anche il fatto di aggregare voti su film con voti su generi forse? forse non dovrebbero influenzarsi in quella maniera
     # todo quello che voglio provare a fare ora e' utilizzare l'info dei generi di MindReader invece di quella di ml-100k come info di base
+    # todo come allenare in maniera alternata? prima uno step sui film e poi frizzo e faccio uno step sui generi
     # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si

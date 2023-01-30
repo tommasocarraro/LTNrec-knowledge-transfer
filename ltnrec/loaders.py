@@ -127,15 +127,19 @@ class TrainingDataLoader:
     def __init__(self,
                  data,
                  batch_size=1,
+                 n_movies=None,
                  shuffle=True):
         """
         Constructor of the training data loader.
         :param data: list of triples (user, item, rating)
         :param batch_size: batch size for the training of the model
+        :param n_movies: number of movies in the dataset. It is used when the loader has to return movie and genre
+        ratings separately. Default to None, meaning that the movie and genre ratings are returned all together
         :param shuffle: whether to shuffle data during training or not
         """
         self.data = np.array(data)
         self.batch_size = batch_size
+        self.n_movies = n_movies
         self.shuffle = shuffle
 
     def __len__(self):
@@ -152,6 +156,17 @@ class TrainingDataLoader:
             data = self.data[idxlist[start_idx:end_idx]]
             u_i_pairs = data[:, :2]
             ratings = data[:, -1]
+            if self.n_movies is not None:
+                mask = u_i_pairs[:, 1] >= self.n_movies
+                if np.sum(mask) == 0:
+                    yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
+                u_g_pairs = u_i_pairs[mask]
+                ratings_g = ratings[mask]
+                u_i_pairs = u_i_pairs[~mask]
+                ratings = ratings[~mask]
+
+                yield (torch.tensor(u_i_pairs), torch.tensor(ratings).float()), \
+                      (torch.tensor(u_g_pairs), torch.tensor(ratings_g).float())
 
             yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
 

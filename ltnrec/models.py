@@ -194,9 +194,17 @@ class MFTrainer(Trainer):
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
-        for batch_idx, (u_i_pairs, ratings) in enumerate(train_loader):
+        for batch_idx, interactions in enumerate(train_loader):
             self.optimizer.zero_grad()
-            loss = self.mse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
+            if not isinstance(interactions[0], tuple):
+                u_i_pairs, ratings = interactions
+                loss = self.mse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
+            else:
+                u_i_pairs, ratings = interactions[0]
+                u_g_pairs, ratings_g = interactions[1]
+                loss1 = self.mse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
+                loss2 = self.mse(self.model(u_g_pairs[:, 0], u_g_pairs[:, 1]), ratings_g)
+                loss = (loss1 + loss2) / 2
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
