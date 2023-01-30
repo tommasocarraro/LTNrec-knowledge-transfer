@@ -1,7 +1,7 @@
 from ltnrec.data import DataManager
 from scipy.sparse import csr_matrix
-from ltnrec.loaders import ValDataLoaderRandomSplit, TrainingDataLoader
-from ltnrec.models import MatrixFactorization, MFTrainer
+from ltnrec.loaders import ValDataLoaderRandomSplit, TrainingDataLoader, TrainingDataLoaderLTN
+from ltnrec.models import MatrixFactorization, MFTrainer, LTNTrainerMF
 from torch.optim import Adam
 import numpy as np
 import wandb
@@ -31,14 +31,26 @@ def search_run():
         train_loader = TrainingDataLoader(train, tr_batch_size)
         mf = MatrixFactorization(n_users, n_items, k, biased)
         trainer = MFTrainer(mf, Adam(mf.parameters(), lr=lr, weight_decay=wd))
-        trainer.train(train_loader, val_loader, "ndcg@10", early=10, verbose=1, wandb_train=True)
+        trainer.train(train_loader, val_loader, "ndcg@100", early=10, verbose=1, wandb_train=True)
 
 
 if __name__ == "__main__":
+    # questo test e' fatto a parita' di iper-parametri
+    # 0.180 con MF
+    # LTN MF 0.190 con convergenza molto piu' veloce, in molte meno epoche arriva al minimo, riesce
+    # poi ad arrivare a 0.200
+    train_loader = TrainingDataLoaderLTN(train, 256)
+    mf = MatrixFactorization(n_users, n_items, 1, False)
+    trainer = LTNTrainerMF(mf, Adam(mf.parameters(), lr=0.0001, weight_decay=0.0001), alpha=0.05, p=5)
+    trainer.train(train_loader, val_loader, "ndcg@100", early=10, verbose=1)
+
+    np.d()
+
+
     wandb.login()
     configuration = {
         'method': "bayes",
-        'metric': {'goal': 'maximize', 'name': 'ndcg@10'},
+        'metric': {'goal': 'maximize', 'name': 'ndcg@100'},
         'parameters': {
             'k': {"values": [1, 8, 16, 32, 64, 128, 256]},
             'lr': {"distribution": "log_uniform_values",
