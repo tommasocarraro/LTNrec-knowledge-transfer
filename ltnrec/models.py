@@ -3,10 +3,10 @@ import ltn
 import torch
 import numpy as np
 from ltnrec.metrics import compute_metric, check_metrics
-from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres
+from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres, ValDataLoaderExact
 import json
 from torch.optim import Adam
-from ltnrec.utils import append_to_result_file, set_seed, reset_wandb_env, remove_seed_from_dataset_name
+from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
 import wandb
 import pickle
 
@@ -105,12 +105,14 @@ class Trainer:
                 if wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
-                    log_dict["%s" % (val_metric, )] = val_score
+                    log_dict["smooth_%s" % (val_metric, )] = val_score
                     # log all stored information
                     wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
             if val_score > best_val_score:
                 best_val_score = val_score
+                if wandb_train:
+                    wandb.log({"%s" % (val_metric, ): val_score})
                 early_counter = 0
                 if save_path:
                     self.save_model(save_path)
@@ -216,10 +218,22 @@ class MFTrainer(Trainer):
 
     def validate(self, val_loader, val_metric):
         val_score = []
-        for batch_idx, (data, ground_truth) in enumerate(val_loader):
-            predicted_scores = self.predict(data.view(-1, 2))
-            val_score.append(compute_metric(val_metric, predicted_scores.view(ground_truth.shape).numpy(),
-                                            ground_truth))
+        if isinstance(val_loader, ValDataLoaderExact):
+            with torch.no_grad():
+                predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
+                if self.model.biased:
+                    predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
+                    predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
+            for batch_idx, (val_users, mask, ground_truth) in enumerate(val_loader):
+                val_score.append(compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()), ground_truth))
+            # for batch_idx, (data, mask, ground_truth) in enumerate(val_loader):
+            #     predicted_scores = self.predict(data.view(-1, 2))
+            #     val_score.append(compute_metric(val_metric, predicted_scores.view(ground_truth.shape).numpy() * mask,
+            #                                     ground_truth))
+        else:
+            for batch_idx, (data, ground_truth) in enumerate(val_loader):
+                predicted_scores = self.predict(data.view(-1, 2))
+                val_score.append(compute_metric(val_metric, predicted_scores.numpy(), ground_truth))
         return np.mean(np.concatenate(val_score))
 
     def test(self, test_loader, metrics):
@@ -228,10 +242,25 @@ class MFTrainer(Trainer):
             metrics = [metrics]
 
         results = {m: [] for m in metrics}
-        for batch_idx, (data, ground_truth) in enumerate(test_loader):
-            for m in results:
-                predicted_scores = self.predict(data.view(-1, 2))
-                results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
+        if isinstance(test_loader, ValDataLoaderExact):
+            with torch.no_grad():
+                predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
+                if self.model.biased:
+                    predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
+                    predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
+            for batch_idx, (test_users, mask, ground_truth) in enumerate(test_loader):
+                for m in results:
+                    results[m].append(compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()), ground_truth))
+            # for batch_idx, (data, mask, ground_truth) in enumerate(test_loader):
+            #     for m in results:
+                    # predicted_scores = self.predict(data.view(-1, 2))
+                    # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
+                    #                                  ground_truth))
+        else:
+            for batch_idx, (data, ground_truth) in enumerate(test_loader):
+                for m in results:
+                    predicted_scores = self.predict(data.view(-1, 2))
+                    results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
         for m in results:
             results[m] = np.mean(np.concatenate(results[m]))
         return results
@@ -330,6 +359,93 @@ class LTNTrainerMFGenres(LTNTrainerMF):
                 f2 = self.Forall(ltn.diag(u2, i2),
                                  self.Exists(g, self.Implies(
                                      self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
+                                     self.Sim(self.Likes(u2, i2), r_)))).value
+            train_sat = self.sat_agg(f1, f2)
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += train_sat.item()
+            f1_sat += f1.item()
+            f2_sat += f2.item()
+
+        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader),
+                                                "training_sat_axiom_1": f1_sat / len(train_loader),
+                                                "training_sat_axiom_2": f2_sat / len(train_loader)}
+
+
+class LTNTrainerMFGenresNew(LTNTrainerMF):
+    """
+    Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function. In
+    addition, unlike the previous model, this LTN has an additional axiom in the loss function. This axiom serves as
+    a kind of regularization for the embeddings learned by the MF model. The axiom states that if a user dislikes a
+    movie genre, then if a movie has that genre, the user should dislike it.
+    The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
+    should be near 1 if the user likes the item, and near 0 if the user dislikes the item.
+    The closeness between the predictions of the Likes function and the ground truth provided by the dataset for the
+    training user-item pairs is obtained by maximizing the truth value of the predicate Sim. The predicate Sim takes
+    as input a predicted score and the ground truth, and returns a value in the range [0., 1.]. Higher the value,
+    higher the closeness between the predicted score and the ground truth.
+
+    This model includes also an additional logical function, called LikesGenre. This is a pre-trained function which
+    returns values near 1 if the input user-genre pair is compatible, 0 otherwise. This function is used to instruct
+    the model on recommending based on content information when no user-item interactions are available (cold-start
+    cases or very sparse cases). The idea is that `n` user-item pairs are randomly sampled from the user-item matrix.
+    Since the matrix is really sparse, the probability to sample missing ratings is really high. On that ratings we
+    apply the second axiom. If, by chance, we sample existing ratings (the probability is low but it is not impossible),
+    the rule will act as a kind of regularization when the ground truth is not aligned with the LikesGenre function.
+
+    For example, if the LikesGenre function states that a user does not like a genre, while the ground truth states that
+    the user likes a movie with that genre, the LikesGenre will correct the ground truth. It is possible to add a weight
+    on the loss to prevent the LikesGenre to dramatically change the ground truth.
+    """
+
+    def __init__(self, mf_model, optimizer, alpha, p, item_genres_matrix, likes_genre_model,
+                 likes_genre_path, exists=False):
+        """
+        Constructor of the trainer for the LTN MF GENRES model.
+
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param alpha: coefficient of smooth equality predicate
+        :param p: hyper-parameter p for pMeanError of rule on genres
+        :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
+        belongs to the genre
+        :param exists: whether to use existential quantifier on the axiom that performs logical reasoning about the
+        genres of the movies. Existential quantifier allows to state that it is enough that the user does not like
+        one single genre of a movie to decrease the rating for that movie. With the universal quantifier, instead,
+        the decrease increases with the number of genres of the movie that the user does not like. The more the number
+        of genres that the user does not like, the greater the decrease of the rating for that movie.
+        :param likes_genre_model: model to be used for the LikesGenre function. This model is not learnable. It is a
+        pre-trained model.
+        :param likes_genre_path: path where the weights for the pre-trained LikesGenre model are stored.
+        """
+        # todo ricordarsi di freezare il predicato
+        # todo costruire la item_genres_matrix
+        super(LTNTrainerMFGenresNew, self).__init__(mf_model, optimizer, alpha, p)
+        item_genres_matrix = torch.tensor(item_genres_matrix.todense())
+        self.exists = exists
+        if exists:
+            self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
+        self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
+        self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
+        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx])
+        likes_genre_model.load_state_dict(torch.load(likes_genre_path)["model_state_dict"])
+        self.LikesGenre = ltn.Function(likes_genre_model)
+
+    def train_epoch(self, train_loader):
+        train_loss, f1_sat, f2_sat = 0.0, 0.0, 0.0
+        for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
+            if not self.exists:
+                f2 = self.Forall(ltn.diag(u2, i2),
+                                 self.Forall(g, self.Implies(
+                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)),
+                                     self.Sim(self.Likes(u2, i2), r_)))).value
+            else:
+                f2 = self.Forall(ltn.diag(u2, i2),
+                                 self.Exists(g, self.Implies(
+                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)),
                                      self.Sim(self.Likes(u2, i2), r_)))).value
             train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat

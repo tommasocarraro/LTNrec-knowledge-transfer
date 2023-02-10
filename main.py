@@ -439,4 +439,10 @@ if __name__ == '__main__':
     # todo se uso solo i generi su mindreader, cosa succede quando passo a LikesGenre l'embedding in un utente che e' di ML?
     # todo usare one-hot per i generi e usare una rete che predice lo score
     # todo creare un val set anche per i generi
+    # todo idea: quando passo su movielens, il predicato LikesGenre inizio ad utilizzarlo solo dopo un po' che si sono appresi i fattori latenti - in questo modo simulo quello che accade nell'apprendimento di MindReader, ovvero do il tempo ai fattori latenti di apprendersi, poi li regolarizzo in stile beta-VAE
+    # todo cercare qualcosa su pre-trained genre embeddings che voi vengono utilizzati in altri task, e sono utili appunto per questa cosa
+    # todo sarebbe fighissimo se funzionasse
+    # todo anche la strada che stavamo prendendo di apprendere tutto insieme potrebbe funzionare, bisogna solo pensarla meglio
+    # todo quello che dice Luciano che pero' vado a cambiare gli embedding degli utenti e' vero, cambiando quelli cambia anche il fatto che gli piacciano o meno dei generi, mentre io volevo che LikesGenre fosse tutto pre-appreso
+    # todo aggiungere ai todo in main che si possono fare anche degli esperimenti sull'impatto del numero di fattori latenti
     # gli dai un nome di file e ti va a cercare l'artefatto in locale, se c'e' non lo scarica, se no si

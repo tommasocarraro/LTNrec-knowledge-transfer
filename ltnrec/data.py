@@ -406,6 +406,158 @@ class DataManager:
         item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
         item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
 
+    def get_mr_genre_ratings(self, seed, k_filter=5, test_size=0.2, val_size=0.1):
+        """
+        It creates the folds for training, validating, and testing a recommendation model on the MindReader dataset.
+        Specifically, it follows the following procedure:
+        1. take the movie genre ratings from MindReader, different from unknown
+        2. filter user who rated less than k genres and genres that have been rated by less than 5 users
+        3. change indexing of users and genres in such a way they are progressive integers
+        4. take the user-movie ratings from MindReader (different from unknown) by filtering out all the users that are
+        not present in the user-genre fold. We want only the users who rated at least one genre
+        5. change indexing of users and movies in such a way they are progressive integers
+        6. perform leave-one-out on the user-genre fold by taking one positive genre rating for each user to create
+        the test set. The same is done for creating the validation set from the remaining training ratings
+        7. perform a 80% train 20% test split on the user-movie fold. Then 90% train and 10% validation are used as
+        proportions to create the validation set from the training set
+        8. for each fold, the user-item interaction matrix is created, with users on the rows and items on the columns.
+        This matrix has a 1 on all the positions in which the user interacted with the item and a 0 otherwise. It is
+        a csr sparse matrix.
+
+        :param seed: seed for random reproducibility
+        :param k_filter: threshold used to filter the users and genres with less than 5 interactions
+        :param test_size: proportion of user-movie positive ratings to be sampled from the dataset to construct
+        the test set
+        :param val_size: proportion of user-movie positive ratings to be sampled from the training set to construct the
+        validation set
+        :return a tuple of 5 elements. Number of users, number of movies, number of genres, a tuple with the folds for
+        movie ratings (4 folds, train set complete, train set small, val set, test set), a tuple with the folds for
+        genre ratings (same as movie ratings)
+        """
+        # get MindReader entities
+        mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader/entities.csv"))
+        mr_entities_dict = mr_entities.to_dict("records")
+        # get mr_genres
+        mr_genres = [entity["uri"] for entity in mr_entities_dict if "Genre" in entity["labels"]]
+        # get MindReader ratings
+        mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader/ratings.csv"))
+        # get ratings on movie genres and remove unknown ratings
+        genre_ratings = mr_ratings[mr_ratings["uri"].isin(mr_genres) & mr_ratings["sentiment"] != 0]
+        # convert negative ratings from -1 to 0
+        genre_ratings = genre_ratings.replace(-1, 0)
+        # filter genres rated by less than 5 users and users who rated less than 5 genres to make movie genre
+        # ratings less sparse
+        tmp1 = genre_ratings.groupby(['userId'], as_index=False)['uri'].count()
+        tmp1.rename(columns={'uri': 'cnt_item'}, inplace=True)
+        tmp2 = genre_ratings.groupby(['uri'], as_index=False)['userId'].count()
+        tmp2.rename(columns={'userId': 'cnt_user'}, inplace=True)
+        genre_ratings = genre_ratings.merge(tmp1, on=['userId']).merge(tmp2, on=['uri'])
+        genre_ratings = genre_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}')
+        genre_ratings = genre_ratings.drop(['cnt_item', 'cnt_user'], axis=1)
+        del tmp1, tmp2
+        # get ratings on movies - remove unknown ratings and convert negatives from -1 to 0
+        mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
+        movie_ratings = mr_ratings[mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0]
+        movie_ratings = movie_ratings.replace(-1, 0)
+        # get users who rated at least five genres
+        users_rated_k_genres = genre_ratings["userId"].unique()
+        # remove all the other users from the movie ratings
+        movie_ratings = movie_ratings[movie_ratings["userId"].isin(users_rated_k_genres)]
+        # get integer user, genre and item indexes
+        u_ids = genre_ratings["userId"].unique()
+        int_u_ids = list(range(len(u_ids)))
+        user_string_to_id = dict(zip(u_ids, int_u_ids))
+        g_ids = genre_ratings["uri"].unique()
+        int_g_ids = list(range(len(g_ids)))
+        g_string_to_id = dict(zip(g_ids, int_g_ids))
+        i_ids = movie_ratings["uri"].unique()
+        int_i_ids = list(range(len(i_ids)))
+        item_string_to_id = dict(zip(i_ids, int_i_ids))
+        genre_ratings = genre_ratings.replace(user_string_to_id).replace(g_string_to_id).reset_index(drop=True)
+        movie_ratings = movie_ratings.replace(user_string_to_id).replace(item_string_to_id).reset_index(drop=True)
+        # remove useless columns
+        genre_ratings = genre_ratings.drop(genre_ratings.columns[[0, 1, 4]], axis=1).reset_index(drop=True)
+        movie_ratings = movie_ratings.drop(movie_ratings.columns[[0, 1, 4]], axis=1).reset_index(drop=True)
+        # get number of users, genres, and items
+        n_users = genre_ratings["userId"].nunique()
+        n_genres = genre_ratings["uri"].nunique()
+        n_items = movie_ratings["uri"].nunique()
+
+        # random sample one positive item for each user to create test set
+        def train_test_split(ratings, frac=None):
+            """
+            It splits the dataset into training and test sets.
+
+            :param ratings: dataframe containing the dataset ratings that have to be split
+            :param frac: proportion of positive ratings to be sampled. If None, it randomly sample one positive
+            rating (LOO)
+            :return: train and test set dataframes containing the positive user-item interactions randomly sampled
+            by the procedure
+            """
+            # filter the ratings in such a way that only the positives remain - we are interested in having positive
+            # ratings in validation. We want to test how the recommendation places the target positive items
+            test_ids = ratings[ratings["sentiment"] == 1].groupby(by=["userId"]).apply(
+                lambda x: x.sample(frac=frac, random_state=seed).index
+            ).explode().values
+            # remove NaN indexes - when pandas is not able to sample due to small group size and high frac, it returns
+            # an empty index which then becomes NaN when converted in numpy
+            test_ids = test_ids[~np.isnan(test_ids.astype("float64"))]
+            train_ids = np.setdiff1d(ratings.index.values, test_ids)
+            train_set = ratings.iloc[train_ids].reset_index(drop=True)
+            test_set = ratings.iloc[test_ids].reset_index(drop=True)
+            return train_set, test_set
+
+        train_set_complete, test_set = train_test_split(genre_ratings)
+        train_set_small, val_set = train_test_split(train_set_complete)
+
+        # create numpy arrays of user-item ratings with interaction matrices
+        def create_fold(fold, n_items):
+            """
+            It creates a dataset fold ready for the training or testing of the model.
+
+            :param fold: dataframe containing user-item interactions
+            :param n_items: number of items in the dataset, used to create the user-item sparse matrix. It has to be
+            passed because depending on the fold, n_items can be the number of movies or the number of genres.
+            :return: a dictionary. The first key (ratings) is a numpy array containing user-item-rating triples, the
+            second one (matrix) is a
+            csr sparse matrix containing the same user-item interactions. A 1 in the matrix means that the user
+            interacted with the item (it gave a positive or negative rating). A 0 means that is is an unobserved item
+            for the user.
+            """
+            return {"ratings": np.array([tuple(rating.values()) for rating in fold.to_dict("records")]),
+                    "matrix": csr_matrix((np.ones(len(fold)), (list(fold["userId"]), list(fold["uri"]))),
+                                         shape=(n_users, n_items))}
+
+        genre_folds = {"train_set_complete": create_fold(train_set_complete, n_genres),
+                       "train_set_small": create_fold(train_set_small, n_genres),
+                       "val_set": create_fold(val_set, n_genres),
+                       "test_set": create_fold(test_set, n_genres)}
+
+        train_set_complete, test_set = train_test_split(movie_ratings, frac=test_size)
+        train_set_small, val_set = train_test_split(train_set_complete, frac=val_size)
+
+        item_folds = {"train_set_complete": create_fold(train_set_complete, n_items),
+                      "train_set_small": create_fold(train_set_small, n_items),
+                      "val_set": create_fold(val_set, n_items),
+                      "test_set": create_fold(test_set, n_items)}
+
+        # create itemXgenres matrix
+        # get MindReader triples file
+        mr_triples = pd.read_csv("./datasets/mindreader/triples.csv")
+        # get only triples with HAS_GENRE relationship, where the head is a movie and the tail a movie genre
+        mr_genre_triples = mr_triples[mr_triples["head_uri"].isin(item_string_to_id.keys()) &
+                                      mr_triples["tail_uri"].isin(g_string_to_id.keys()) &
+                                      (mr_triples["relation"] == "HAS_GENRE")]
+        # replace URIs with integer indexes
+        mr_genre_triples = mr_genre_triples.replace(item_string_to_id).replace(g_string_to_id)
+        # construct the itemXgenres matrix
+        # todo alcuni film non hanno generi associati e c'e' un genere che non e' associato ad alcun film
+        item_genres_matrix = csr_matrix((np.ones(len(mr_genre_triples)),
+                                                (list(mr_genre_triples["head_uri"]),
+                                                 list(mr_genre_triples["tail_uri"]))), shape=(n_items, n_genres))
+
+        return n_users, n_items, n_genres, item_folds, genre_folds, item_genres_matrix
+
     def create_mapping(self):
         """
         It matches the movies of ml-100k with the movies of MindReader to find the joint set of the final dataset.

@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import ltn
+import time
 
 
 class TrainingDataLoaderLTN:
@@ -113,6 +114,77 @@ class TrainingDataLoaderLTNGenres:
                    ltn.Constant(torch.tensor(0.)))
 
 
+class TrainingDataLoaderLTNGenresNew:
+    """
+    Same loader as the previous one but since the genres are now separated from the movies, we do not need to add
+    n_items when we sample the genres. See LTN variable genres on the previous loader and this loader to understand.
+    """
+    def __init__(self,
+                 movie_ratings,
+                 n_users,
+                 n_items,
+                 n_genres,
+                 genre_sample_size=5,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param movie_ratings: list of triples (user, item, rating)
+        :param n_users: number of users in the dataset
+        :param n_items: number of items in the dataset - this cannot be computed from training ratings since the
+        procedure which creates the folds could have moved the only rating of one item in test set
+        :param n_genres: number of movie genres in the dataset
+        :param genre_sample_size: number of movie genres that have to be sampled at each batch (we sample to increase
+        efficiency)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        assert genre_sample_size <= n_genres, "You cannot set `genre_sample_size` greater than `n_genres`. The number" \
+                                              "of sampled genres cannot exceed the number of available genres in" \
+                                              "the dataset."
+        self.movie_ratings = np.array(movie_ratings)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.n_users = n_users
+        self.n_items = n_items
+        self.n_genres = n_genres
+        self.genre_sample_size = genre_sample_size
+
+    def __len__(self):
+        return int(np.ceil(self.movie_ratings.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.movie_ratings.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            data = self.movie_ratings[idxlist[start_idx:end_idx]]
+            # get random user-item pairs - the probability to sample seen pairs, namely pairs in the dataset, it is
+            # really low due to the sparsity of the dataset
+            # even if we have a small number of sampled seen pairs it does not matter since that pairs act as a kind
+            # of regularization for the target ratings, in fact they could correct wrong ground truth
+            # this is the most efficient way to sample unseen pairs
+            u_idx = np.random.choice(self.n_users, size=self.batch_size)
+            i_idx = np.random.choice(self.n_items, size=self.batch_size)
+            # todo see what is faster between random sample and np random Generator
+
+            # note that the constant is used to represent the negative rating (rating equal to zero)
+            # this is used by the Sim predicate
+
+            yield (ltn.Variable('users_phi1', torch.tensor(data[:, 0]), add_batch_dim=False),
+                   ltn.Variable('items_phi1', torch.tensor(data[:, 1]), add_batch_dim=False),
+                   ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)), \
+                  (ltn.Variable('users_phi2', torch.tensor(u_idx), add_batch_dim=False),
+                   ltn.Variable('items_phi2', torch.tensor(i_idx), add_batch_dim=False),
+                   # note that here we add self.n_items because we want to model genres after the movies in the MF model
+                   ltn.Variable('genres', torch.randint(0, self.n_genres, size=(self.genre_sample_size,)),
+                                add_batch_dim=False),
+                   ltn.Constant(torch.tensor(0.)))
+
+
 class TrainingDataLoader:
     """
     Data loader to load the training set of the MindReader dataset. It creates batches composed of user-item pairs
@@ -182,3 +254,43 @@ class ValDataLoader:
             ground_truth[:, -1] = 1
 
             yield torch.tensor(data), ground_truth
+
+
+class ValDataLoaderExact:
+    """
+    Data loader to load the validation/test set of the MindReader dataset for measuring exact metrics (all the items
+    are ranked instead of sampling some of them).
+    """
+
+    def __init__(self,
+                 te_u_ids,
+                 tr_ui_matrix,
+                 te_ui_matrix,
+                 batch_size=1):
+        """
+        Constructor of the validation data loader.
+        :param data: matrix of user-item pairs. Every row is a user, where the last position contains the positive
+        user-item pair, while the first 100 positions contain the negative user-item pairs
+        :param batch_size: batch size for the validation/test of the model
+        """
+        self.te_u_ids = te_u_ids
+        self.tr_ui_matrix = tr_ui_matrix
+        self.n_users = tr_ui_matrix.shape[0]
+        self.n_items = tr_ui_matrix.shape[1]
+        self.te_ui_matrix = te_ui_matrix
+        self.batch_size = batch_size
+
+    def __len__(self):
+        return int(np.ceil(len(self.te_u_ids) / self.batch_size))
+
+    def __iter__(self):
+        n = len(self.te_u_ids)
+        idxlist = list(range(n))
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            # to_predict = [[[u, i] for i in range(self.n_items)] for u in self.te_u_ids[idxlist[start_idx:end_idx]]]
+            ground_truth = self.te_ui_matrix[self.te_u_ids[idxlist[start_idx:end_idx]]].toarray()
+            mask = self.tr_ui_matrix[self.te_u_ids[idxlist[start_idx:end_idx]]].toarray()
+
+            yield self.te_u_ids[idxlist[start_idx:end_idx]], mask, ground_truth  # self.te_u_ids[idxlist[start_idx:end_idx]] torch.tensor(to_predict)
