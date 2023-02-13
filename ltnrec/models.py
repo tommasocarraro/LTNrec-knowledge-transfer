@@ -6,7 +6,7 @@ from ltnrec.metrics import compute_metric, check_metrics
 from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres
 import json
 from torch.optim import Adam
-from ltnrec.utils import append_to_result_file, set_seed, reset_wandb_env, remove_seed_from_dataset_name
+from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
 import wandb
 import pickle
 
@@ -105,12 +105,14 @@ class Trainer:
                 if wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
-                    log_dict["%s" % (val_metric, )] = val_score
+                    log_dict["smooth_%s" % (val_metric, )] = val_score
                     # log all stored information
                     wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
             if val_score > best_val_score:
                 best_val_score = val_score
+                if wandb_train:
+                    wandb.log({"%s" % (val_metric,): val_score})
                 early_counter = 0
                 if save_path:
                     self.save_model(save_path)

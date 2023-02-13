@@ -30,19 +30,19 @@ def check_compatibility(model, dataset_id):
 
 
 def grid_search(model, dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project):
-    model.grid_search_wandb(dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project)
+    model.grid_search(dataset_id, local_dataset_path_prefix, local_config_path_prefix, wandb_project)
 
 
 def train(model, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix, local_model_path_prefix,
           wandb_project):
-    model.train_model_wandb(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
-                            local_model_path_prefix, wandb_project)
+    model.train(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+                local_model_path_prefix, wandb_project)
 
 
 def model_test(model, dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
                local_model_path_prefix, local_result_path_prefix, wandb_project):
-    model.test_model_wandb(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
-                           local_model_path_prefix, local_result_path_prefix, wandb_project)
+    model.test(dataset_id, config_seed, local_dataset_path_prefix, local_config_path_prefix,
+               local_model_path_prefix, local_result_path_prefix, wandb_project)
 
 
 def get_dataset_by_name(ml_dataset, training_fold, p_to_keep=1, seed=None):
@@ -389,13 +389,14 @@ def run_sparsity_exp_mr(wandb_project, training_folds=tr_folds_mr, n_neg=100,
                           models=models, evaluation_modes=("mr", ), training_folds=training_folds,
                           proportions_to_keep=proportions_to_keep)
 
+
 if __name__ == '__main__':
-    run_experiment(wandb_project='final-stable-100-ndcg',
-                   # evaluation_modes="ml\mr",
-                   # training_folds=("ml(movies)|mr(genres)", "ml|mr(movies+genres)"),  # , "ml(movies)|mr(genres)"
+    run_experiment(wandb_project='bug-fixed',
+                   evaluation_modes="ml",
+                   training_folds=("ml", "ml|mr(movies+genres)"),  # ("ml(movies)|mr(genres)", "ml|mr(movies+genres)"),  # , "ml(movies)|mr(genres)"
                    # models="standard_mf",
                    # proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),  # 1, 0.5, 0.2, 0.1, 0.05
-                   starting_seed=0, n_runs=30)
+                   starting_seed=0, n_runs=5)
     # run_sparsity_exp_mr(wandb_project='sparsity-exp-mr',
     #                     proportions_to_keep=(1, 0.5, 0.2, 0.1, 0.05, 0.01),
     #                     starting_seed=0, n_runs=2)
