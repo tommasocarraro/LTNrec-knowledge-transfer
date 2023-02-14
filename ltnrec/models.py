@@ -3,7 +3,8 @@ import ltn
 import torch
 import numpy as np
 from ltnrec.metrics import compute_metric, check_metrics
-from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres, ValDataLoaderExact
+from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres, \
+    ValDataLoaderExact
 import json
 from torch.optim import Adam
 from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
@@ -21,6 +22,7 @@ class MatrixFactorization(torch.nn.Module):
     The model has inside two matrices: one containing the embeddings of the users of the system, one containing the
     embeddings of the items of the system.
     """
+
     def __init__(self, n_users, n_items, n_factors, biased=False, weight_initializer=torch.nn.init.xavier_normal_):
         """
         Construction of the matrix factorization model.
@@ -63,6 +65,7 @@ class Trainer:
     """
     Abstract base class that any trainer must inherit from.
     """
+
     def __init__(self, model, optimizer):
         self.model = model
         self.optimizer = optimizer
@@ -100,19 +103,19 @@ class Trainer:
                                                                                   val_score)
                 if model_name is not None:
                     # add model name to log information if model name is available
-                    log_record = ("%s: " % (model_name, )) + log_record
+                    log_record = ("%s: " % (model_name,)) + log_record
                 print(log_record)
                 if wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
-                    log_dict["smooth_%s" % (val_metric, )] = val_score
+                    log_dict["smooth_%s" % (val_metric,)] = val_score
                     # log all stored information
                     wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
             if val_score > best_val_score:
                 best_val_score = val_score
                 if wandb_train:
-                    wandb.log({"%s" % (val_metric, ): val_score})
+                    wandb.log({"%s" % (val_metric,): val_score})
                 early_counter = 0
                 if save_path:
                     self.save_model(save_path)
@@ -184,6 +187,7 @@ class MFTrainer(Trainer):
     The objective of the Matrix Factorization is to minimize the MSE between the predictions of the model and the
     ground truth.
     """
+
     def __init__(self, mf_model, optimizer):
         """
         Constructor of the trainer for the MF model.
@@ -225,7 +229,9 @@ class MFTrainer(Trainer):
                     predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
                     predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
             for batch_idx, (val_users, mask, ground_truth) in enumerate(val_loader):
-                val_score.append(compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()), ground_truth))
+                val_score.append(
+                    compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()),
+                                   ground_truth))
             # for batch_idx, (data, mask, ground_truth) in enumerate(val_loader):
             #     predicted_scores = self.predict(data.view(-1, 2))
             #     val_score.append(compute_metric(val_metric, predicted_scores.view(ground_truth.shape).numpy() * mask,
@@ -250,17 +256,20 @@ class MFTrainer(Trainer):
                     predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
             for batch_idx, (test_users, mask, ground_truth) in enumerate(test_loader):
                 for m in results:
-                    results[m].append(compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()), ground_truth))
+                    results[m].append(
+                        compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()),
+                                       ground_truth))
             # for batch_idx, (data, mask, ground_truth) in enumerate(test_loader):
             #     for m in results:
-                    # predicted_scores = self.predict(data.view(-1, 2))
-                    # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
-                    #                                  ground_truth))
+            # predicted_scores = self.predict(data.view(-1, 2))
+            # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
+            #                                  ground_truth))
         else:
             for batch_idx, (data, ground_truth) in enumerate(test_loader):
                 for m in results:
                     predicted_scores = self.predict(data.view(-1, 2))
-                    results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
+                    results[m].append(
+                        compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
         for m in results:
             results[m] = np.mean(np.concatenate(results[m]))
         return results
@@ -276,6 +285,7 @@ class LTNTrainerMF(MFTrainer):
     as input a predicted score and the ground truth, and returns a value in the range [0., 1.]. Higher the value,
     higher the closeness between the predicted score and the ground truth.
     """
+
     def __init__(self, mf_model, optimizer, alpha, p=2):
         """
         Constructor of the trainer for the LTN with MF as base model.
@@ -430,6 +440,8 @@ class LTNTrainerMFGenresNew(LTNTrainerMF):
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx])
         likes_genre_model.load_state_dict(torch.load(likes_genre_path)["model_state_dict"])
+        # freeze LikesGenre function weights since it is a pre-trained function
+        likes_genre_model.requires_grad_(False)
         self.LikesGenre = ltn.Function(likes_genre_model)
 
     def train_epoch(self, train_loader):
@@ -438,15 +450,29 @@ class LTNTrainerMFGenresNew(LTNTrainerMF):
             self.optimizer.zero_grad()
             f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
             if not self.exists:
+                # todo qua c'e' il discorso di cambiare il p per concentrarsi moltissimo sugli outliers - perche' abbiamo veramente pochi esempi in cui la regola vale
+                # todo verificare perche' la regola non funziona. Sembrerebbe che le coppie utente item pescate a caso siano gia' negative, nel senso che, in media, all'utente non piace l'item
+                # todo sembrerebbe anche che, in media, agli utenti del batch non piacciano i generi che sono stati pescati
+                # todo HasGenre e' spesso falso e ci sta, il discorso e' che e' il per ogni che e' molto basso
+                # todo applicare solo da una certa epoca in poi -> questo potrebbe essere interessante
+                # todo filtrare i generi puo' essere un'idea, cosi diventa meno rara la soddisfazione automatica della regola e anche piu' accurato il predicato LikesGenre, che pio' essere addestrato con ndcg@1 se ci sono solo 18 generi
+                # todo pensare a tipologie di implicazione che non sono sempre vere a caso -> provare a dare un'occhiata al paper di Emilie
+                # todo per il sampling dovrei aumentare la probabilita' che all'utente piace un film, invece sembra che non sia cosi su quelli che pesco
+                # todo pensiamo bene alle varie parti della regola e a cosa puo' esserci che non va, possiamo fare affidamento su predicato appreso dei generi? E' veramente accurato?
+                # todo quali dovrebbero essere i valori di p? p puo' esserci utile per rendere meno vera la regola? Abbiamo sempre il problema che la premessa e' falsa. In piu' e' raro pescare qualcosa che all'utente piace e quindi la regola non si puo' applicare
+                # todo forse possiamo applicare anche la regola che se gli piace un genere allora gli piacciono i film di quel genere, questa meno strict dell'altra
+                # todo possiamo anche pensare di iniziare ad utilizzare queste regole piu' tardi durante il learning
+                # todo mi basta riuscire a mostrare che questa conoscenza e' utile e che LTN e' una maniera semplice di utilizzarla per fare in modo che ci possa essere un paper
+                # esistono dei tipi di implicazione attenti a queste cose o si possono creare?
                 f2 = self.Forall(ltn.diag(u2, i2),
                                  self.Forall(g, self.Implies(
                                      self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)),
-                                     self.Sim(self.Likes(u2, i2), r_)))).value
+                                     self.Sim(self.Likes(u2, i2), r_))), p=2).value
             else:
                 f2 = self.Forall(ltn.diag(u2, i2),
                                  self.Exists(g, self.Implies(
-                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)),
-                                     self.Sim(self.Likes(u2, i2), r_)))).value
+                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))), p=10),
+                                 self.Sim(self.Likes(u2, i2), r_), p=10).value
             train_sat = self.sat_agg(f1, f2)
             loss = 1. - train_sat
             loss.backward()
@@ -464,6 +490,7 @@ class Model:
     """
     Abstract base class that any model must inherit from.
     """
+
     def __init__(self, config_file_name):
         """
         It constructs a model.
@@ -500,7 +527,8 @@ class Model:
                                                                   self.model_name, dataset_id)):
             print("Grid search for model=%s-dataset=%s has been already performed. Find the config "
                   "file at %s/config-model=%s-dataset=%s.json" % (self.model_name, dataset_id,
-                                                                  local_config_path_prefix, self.model_name, dataset_id))
+                                                                  local_config_path_prefix, self.model_name,
+                                                                  dataset_id))
         else:
             # if the best configuration artifact does not exists, we have to run a grid search for this model and
             # dataset
@@ -664,8 +692,9 @@ class Model:
         else:
             # if it does not exists, we have to create it
             # check if a best model artifact for this model already exists
-            if not os.path.exists(os.path.join(local_model_path_prefix, "model-model=%s-dataset=%s.pth" % (self.model_name,
-                                                                                                           dataset_id))):
+            if not os.path.exists(
+                    os.path.join(local_model_path_prefix, "model-model=%s-dataset=%s.pth" % (self.model_name,
+                                                                                             dataset_id))):
                 raise ValueError("Best model file model-model=%s-dataset=%s.pth does not exist. You should train"
                                  "the model before testing it." % (self.model_name, dataset_id))
             else:
@@ -703,6 +732,7 @@ class StandardMFModel(Model):
     """
     Standard matrix factorization model. It uses the MSE between target and predicted ratings as an objective.
     """
+
     def __init__(self, config_file_name="standard_mf"):
         super(StandardMFModel, self).__init__(config_file_name)
 
@@ -763,6 +793,7 @@ class LTNMFModel(Model):
     Matrix factorization model trained using LTN. It uses a logic formula that forces the target ratings to be as
     similar as possible to the predicted ratings as an objective.
     """
+
     def __init__(self, config_file_name="ltn_mf"):
         super(LTNMFModel, self).__init__(config_file_name)
 
@@ -778,7 +809,8 @@ class LTNMFModel(Model):
 
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
-                         "wd=%.4f,p=%d,alpha=%.3f" % (self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p, alpha)
+                         "wd=%.4f,p=%d,alpha=%.3f" % (
+                         self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
@@ -831,6 +863,7 @@ class LTNMFGenresModel(Model):
     In particular, for the movies that have not been rated by a user, it forces the score to be low if the user did not
     like a genre of that movie in the past.
     """
+
     def __init__(self, config_file_name="ltn_mf_genres"):
         super(LTNMFGenresModel, self).__init__(config_file_name)
 
@@ -848,8 +881,9 @@ class LTNMFGenresModel(Model):
 
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
-                         "wd=%.4f,p=%d,n_sampled_genres=%d,exists=%d,alpha=%.3f" % (self.model_name, dataset_id, k, biased, lr,
-                                                                         tr_batch_size, wd, p, n_sampled_genres, exists, alpha)
+                         "wd=%.4f,p=%d,n_sampled_genres=%d,exists=%d,alpha=%.3f" % (
+                         self.model_name, dataset_id, k, biased, lr,
+                         tr_batch_size, wd, p, n_sampled_genres, exists, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)

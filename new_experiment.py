@@ -28,9 +28,7 @@ BEST_LTN_GENRES = {
     "lr": 0.01,
     "tr_batch_size": 256,
     "wd": 0.05,
-    "exists": 0,
-    "genre_sample_size": 100,
-    "p": 10
+    "genre_sample_size": 100
 }
 
 
@@ -55,8 +53,8 @@ def trial_ltn_genres():
         wd = wandb.config.wd
         tr_batch_size = wandb.config.tr_batch_size
         genre_sample_size = wandb.config.genre_sample_size
-        p = wandb.config.p
-        exists = wandb.config.exists
+        p = 10  # wandb.config.p
+        exists = 0  # wandb.config.exists
         train_loader = TrainingDataLoaderLTNGenresNew(train_set["ratings"], n_users, n_items, n_genres,
                                                       genre_sample_size, tr_batch_size)
         mf = MatrixFactorization(n_users, n_items, k, biased)
@@ -131,22 +129,14 @@ if __name__ == "__main__":
                    "min": 0.0001,
                    "max": 0.1},
             'biased': {"values": [0, 1]},
-            'exists': {"values": [0, 1]},
+            # 'exists': {"values": [0, 1]},
             'genre_sample_size': {"values": [1, 5, 10, 50, 100, n_genres]},
-            'p': {"values": [2, 5, 10]},
+            # 'p': {"values": [2, 5, 10]},
             'tr_batch_size': {"values": [64, 128, 256, 512]}}
     }
 
     # construct LikesGenre model
     likes_genre_model = MatrixFactorization(n_users, n_genres, n_factors=64, biased=1)
-
-    # sweep_id = wandb.sweep(sweep=configuration_ltn_genres, project="best_mr_new")
-    # wandb.agent(sweep_id, function=trial_ltn_genres, count=50)
-
-    # train_ltn_genres(BEST_LTN_GENRES)
-
-    # fatto l'ennesimo esperimento fallimentare, ora l'obiettivo e' quello di aumentare la sparsita' del dataset e vedere
-    # come se la cava il nostro modello, se e' efficace o meno
 
     def make_sparser(prop, data, seed):
         """
@@ -168,6 +158,21 @@ if __name__ == "__main__":
         to_keep = np.setdiff1d(data.index.values, to_remove)
         new_data = data.iloc[to_keep].reset_index(drop=True)
         return np.array([tuple(rating.values()) for rating in new_data.to_dict("records")])
+
+    train_set["ratings"] = make_sparser(0.1, train_set["ratings"], SEED)
+
+    sweep_id = wandb.sweep(sweep=configuration, project="nuova_prova")
+    wandb.agent(sweep_id, function=trial_ltn, count=30)
+
+    sweep_id = wandb.sweep(sweep=configuration_ltn_genres, project="nuova_prova")
+    wandb.agent(sweep_id, function=trial_ltn_genres, count=30)
+
+    np.d()
+
+    # train_ltn_genres(BEST_LTN_GENRES)
+
+    # fatto l'ennesimo esperimento fallimentare, ora l'obiettivo e' quello di aumentare la sparsita' del dataset e vedere
+    # come se la cava il nostro modello, se e' efficace o meno
 
     props = [0.8, 0.6, 0.4, 0.2, 0.1, 0.05]
     datasets = [make_sparser(prop, train_set["ratings"], SEED) for prop in props]
