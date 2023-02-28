@@ -1,10 +1,12 @@
 import os.path
+import sys
+
 import ltn
 import torch
 import numpy as np
 from ltnrec.metrics import compute_metric, check_metrics
 from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres, \
-    ValDataLoaderExact
+    ValDataLoaderExact, ValDataLoaderMSE
 import json
 from torch.optim import Adam
 from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
@@ -36,14 +38,18 @@ class MatrixFactorization(torch.nn.Module):
         super(MatrixFactorization, self).__init__()
         self.u_emb = torch.nn.Embedding(n_users, n_factors)
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
-        weight_initializer(self.u_emb.weight)
-        weight_initializer(self.i_emb.weight)
+        torch.nn.init.normal_(self.u_emb.weight, 0.0, 0.001)
+        torch.nn.init.normal_(self.i_emb.weight, 0.0, 0.001)
+        # weight_initializer(self.u_emb.weight)
+        # weight_initializer(self.i_emb.weight)
         self.biased = biased
         if biased:
             self.u_bias = torch.nn.Embedding(n_users, 1)
             self.i_bias = torch.nn.Embedding(n_items, 1)
-            weight_initializer(self.u_bias.weight)
-            weight_initializer(self.i_bias.weight)
+            torch.nn.init.normal_(self.u_bias.weight, 0.0, 0.001)
+            torch.nn.init.normal_(self.i_bias.weight, 0.0, 0.001)
+            # weight_initializer(self.u_bias.weight)
+            # weight_initializer(self.i_bias.weight)
         self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, u_idx, i_idx, dim=1, normalize=False):
@@ -70,8 +76,8 @@ class Trainer:
         self.model = model
         self.optimizer = optimizer
 
-    def train(self, train_loader, val_loader, val_metric, n_epochs=200, early=None, verbose=10, save_path=None,
-              model_name=None, wandb_train=False):
+    def train(self, train_loader, val_loader, val_metric=None, n_epochs=200, early=None, verbose=10, save_path=None,
+              model_name=None, wandb_train=False, val_loss_early=False):
         """
         Method for the train of the model.
         :param train_loader: data loader for training data
@@ -84,13 +90,16 @@ class Trainer:
         :param model_name: name of model. It is used for printing model information in the log. It is useful when
         concurrency is used to train simultaneously, so we need to distinguish among different concurrent runs
         :param wandb_train: whether the training is done with Weights and Biases or not
+        :param val_loss_early: whether to use early stopping based on the validation loss instead of the validation
+        metric. Default to False, in the sense that is uses the validation metric.
         """
         if wandb_train:
             # log gradients and parameters with Weights and Biases
             wandb.watch(self.model, log="all")
-        best_val_score = 0.0
+        best_val_score = 0.0 if not val_loss_early else sys.maxsize
         early_counter = 0
-        check_metrics(val_metric)
+        if val_metric is not None:
+            check_metrics(val_metric)
 
         for epoch in range(n_epochs):
             # training step
@@ -99,8 +108,11 @@ class Trainer:
             val_score = self.validate(val_loader, val_metric)
             # print epoch data
             if (epoch + 1) % verbose == 0:
-                log_record = "Epoch %d - Train loss %.3f - Validation %s %.3f" % (epoch + 1, train_loss, val_metric,
-                                                                                  val_score)
+                log_record = "Epoch %d - Train loss %.3f" % (epoch + 1, train_loss)
+                if val_metric is not None:
+                    log_record += " - Validation %s %.3f" % (val_metric, val_score)
+                else:
+                    log_record += " - Val loss %.3f" % (val_score)
                 if model_name is not None:
                     # add model name to log information if model name is available
                     log_record = ("%s: " % (model_name,)) + log_record
@@ -108,22 +120,39 @@ class Trainer:
                 if wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
-                    log_dict["smooth_%s" % (val_metric,)] = val_score
+                    if val_metric is not None:
+                        wandb.log({"smooth_%s" % (val_metric,): val_score})
+                    else:
+                        wandb.log({"smooth_val_loss": val_score})
                     # log all stored information
                     wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
-            if val_score > best_val_score:
-                best_val_score = val_score
-                if wandb_train:
-                    wandb.log({"%s" % (val_metric,): val_score})
-                early_counter = 0
-                if save_path:
-                    self.save_model(save_path)
+            if val_loss_early:
+                if val_score < best_val_score:
+                    best_val_score = val_score
+                    if wandb_train:
+                        wandb.log({"val_loss": best_val_score})
+                    early_counter = 0
+                    if save_path:
+                        self.save_model(save_path)
+                else:
+                    early_counter += 1
+                    if early is not None and early_counter > early:
+                        print("Training interrupted due to early stopping")
+                        break
             else:
-                early_counter += 1
-                if early is not None and early_counter > early:
-                    print("Training interrupted due to early stopping")
-                    break
+                if val_score > best_val_score:
+                    best_val_score = val_score
+                    if wandb_train:
+                        wandb.log({"%s" % (val_metric,): val_score})
+                    early_counter = 0
+                    if save_path:
+                        self.save_model(save_path)
+                else:
+                    early_counter += 1
+                    if early is not None and early_counter > early:
+                        print("Training interrupted due to early stopping")
+                        break
 
     def train_epoch(self, train_loader):
         """
@@ -188,7 +217,7 @@ class MFTrainer(Trainer):
     ground truth.
     """
 
-    def __init__(self, mf_model, optimizer):
+    def __init__(self, mf_model, optimizer, lam, scheduler=None):
         """
         Constructor of the trainer for the MF model.
         :param mf_model: Matrix Factorization model
@@ -196,16 +225,29 @@ class MFTrainer(Trainer):
         """
         super(MFTrainer, self).__init__(mf_model, optimizer)
         self.mse = torch.nn.MSELoss()
+        self.wmse = lambda pred, gt, w: torch.mean(w * torch.square(pred - gt))
+        self.lam = lam
+        self.scheduler = scheduler
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
         for batch_idx, (u_i_pairs, ratings) in enumerate(train_loader):
             self.optimizer.zero_grad()
             loss = self.mse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
+            train_loss += loss.item()
+            # todo ricordarsi che qui ho messo la nuclear norm
+            loss += self.lam * (torch.sum(torch.square(self.model.i_emb.weight)) + torch.sum(torch.square(self.model.u_emb.weight)))# torch.sum(torch.linalg.svd(self.model.u_emb.weight)[1])
+            # loss += torch.sum(torch.linalg.svd(self.model.u_emb.weight)[1])
+            # loss += torch.sum(torch.linalg.svd(self.model.i_emb.weight)[1])
+            # todo ricordarsi che ho messo della regolarizzazione anche sui bias
+            if self.model.biased:
+                loss += self.lam * (torch.sum(torch.square(self.model.i_bias.weight)) + torch.sum(torch.square(self.model.u_bias.weight)))
+            # loss = self.wmse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings, torch.where(ratings == -1., 20., 0.5))
             loss.backward()
             self.optimizer.step()
-            train_loss += loss.item()
-        return train_loss / len(train_loader), {"training_mse": train_loss / len(train_loader)}
+        if self.scheduler is not None:
+            self.scheduler.step()
+        return train_loss / len(train_loader), {"train_loss": train_loss / len(train_loader)}
 
     def predict(self, x, dim=1, normalize=False):
         """
@@ -223,19 +265,21 @@ class MFTrainer(Trainer):
     def validate(self, val_loader, val_metric):
         val_score = []
         if isinstance(val_loader, ValDataLoaderExact):
-            with torch.no_grad():
-                predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
-                if self.model.biased:
-                    predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
-                    predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
             for batch_idx, (val_users, mask, ground_truth) in enumerate(val_loader):
+                with torch.no_grad():
+                    predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
+                    if self.model.biased:
+                        predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
+                        predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
                 val_score.append(
                     compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()),
                                    ground_truth))
-            # for batch_idx, (data, mask, ground_truth) in enumerate(val_loader):
-            #     predicted_scores = self.predict(data.view(-1, 2))
-            #     val_score.append(compute_metric(val_metric, predicted_scores.view(ground_truth.shape).numpy() * mask,
-            #                                     ground_truth))
+        elif isinstance(val_loader, ValDataLoaderMSE):
+            for batch_idx, (to_predict, ground_truth) in enumerate(val_loader):
+                with torch.no_grad():
+                    preds = self.model(to_predict[:, 0], to_predict[:, 1])
+                    # val_score.append(self.mse(preds, ground_truth))
+                    val_score.append(torch.square(preds - ground_truth))
         else:
             for batch_idx, (data, ground_truth) in enumerate(val_loader):
                 predicted_scores = self.predict(data.view(-1, 2))
@@ -286,32 +330,34 @@ class LTNTrainerMF(MFTrainer):
     higher the closeness between the predicted score and the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, p=2):
+    def __init__(self, mf_model, optimizer, alpha, scheduler=None):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
         :param alpha: coefficient of smooth equality predicate
-        :param p: hyper-parameter p for pMeanError of the quantifier
         """
         super(LTNTrainerMF, self).__init__(mf_model, optimizer)
         self.Likes = ltn.Function(self.model)
         self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
-        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
+        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(), quantifier='f')
         self.sat_agg = ltn.fuzzy_ops.SatAgg()
+        self.scheduler = scheduler
 
     def train_epoch(self, train_loader):
-        train_loss = 0.0
+        train_loss, train_sat_agg = 0.0, 0.0
         for batch_idx, (u, i, r) in enumerate(train_loader):
             self.optimizer.zero_grad()
             train_sat = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r)).value
+            train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
-            train_loss += train_sat.item()
-
-        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader)}
+            train_loss += loss.item()
+        if self.scheduler is not None:
+            self.scheduler.step()
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
 
 
 class LTNTrainerMFGenres(LTNTrainerMF):
@@ -328,27 +374,22 @@ class LTNTrainerMFGenres(LTNTrainerMF):
     higher the closeness between the predicted score and the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, p, n_movies, item_genres_matrix, exists=False):
+    def __init__(self, mf_model, optimizer, alpha, p_exists, p_forall, n_movies, item_genres_matrix):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
         :param alpha: coefficient of smooth equality predicate
-        :param p: hyper-parameter p for pMeanError of rule on genres
+        :param p_exists: hyper-parameter p for pMean of rule on genres
+        :param p_forall: hyper-parameter p for pMeanError of rule on genres
         :param n_movies: number of movies in the dataset
         :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
         belongs to the genre
-        :param exists: whether to use existential quantifier on the axiom that performs logical reasoning about the
-        genres of the movies. Existential quantifier allows to state that it is enough that the user does not like
-        one single genre of a movie to decrease the rating for that movie. With the universal quantifier, instead,
-        the decrease increases with the number of genres of the movie that the user does not like. The more the number
-        of genres that the user does not like, the greater the decrease of the rating for that movie.
         """
-        super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha, p)
+        super(LTNTrainerMFGenres, self).__init__(mf_model, optimizer, alpha)
+        self.p_forall = p_forall
         item_genres_matrix = torch.tensor(item_genres_matrix.todense())
-        self.exists = exists
-        if exists:
-            self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
+        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(p=p_exists), quantifier="e")
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
         # here, we need to remove n_movies because the genres are in [n_movies, n_movies + n_genres] in the MF model
@@ -356,29 +397,23 @@ class LTNTrainerMFGenres(LTNTrainerMF):
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx - n_movies])
 
     def train_epoch(self, train_loader):
-        train_loss, f1_sat, f2_sat = 0.0, 0.0, 0.0
+        train_loss, train_sat_agg, f1_sat, f2_sat = 0.0, 0.0, 0.0, 0.0
         for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
             self.optimizer.zero_grad()
             f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
-            if not self.exists:
-                f2 = self.Forall(ltn.diag(u2, i2),
-                                 self.Forall(g, self.Implies(
-                                     self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
-                                     self.Sim(self.Likes(u2, i2), r_)))).value
-            else:
-                f2 = self.Forall(ltn.diag(u2, i2),
-                                 self.Exists(g, self.Implies(
-                                     self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g)),
-                                     self.Sim(self.Likes(u2, i2), r_)))).value
+            f2 = self.Forall(ltn.diag(u2, i2), self.Implies(
+                self.Exists(g, self.And(self.Sim(self.Likes(u2, g), r_), self.HasGenre(i2, g))),
+                self.Sim(self.Likes(u2, i2), r_)), p=self.p_forall).value
             train_sat = self.sat_agg(f1, f2)
+            train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
-            train_loss += train_sat.item()
+            train_loss += loss.item()
             f1_sat += f1.item()
             f2_sat += f2.item()
 
-        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader),
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
                                                 "training_sat_axiom_1": f1_sat / len(train_loader),
                                                 "training_sat_axiom_2": f2_sat / len(train_loader)}
 
@@ -409,33 +444,28 @@ class LTNTrainerMFGenresNew(LTNTrainerMF):
     on the loss to prevent the LikesGenre to dramatically change the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, p, item_genres_matrix, likes_genre_model,
-                 likes_genre_path, exists=False):
+    def __init__(self, mf_model, optimizer, alpha, p_exists, p_forall, item_genres_matrix, likes_genre_model,
+                 likes_genre_path):
         """
         Constructor of the trainer for the LTN MF GENRES model.
 
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
         :param alpha: coefficient of smooth equality predicate
-        :param p: hyper-parameter p for pMeanError of rule on genres
+        :param p_exists: hyper-parameter p for pMean of rule on genres
+        :param p_forall: hyper-parameter p for pMeanError of rule on genres
         :param item_genres_matrix: sparse matrix with items on the rows and genres on the columns. A 1 means the item
         belongs to the genre
-        :param exists: whether to use existential quantifier on the axiom that performs logical reasoning about the
-        genres of the movies. Existential quantifier allows to state that it is enough that the user does not like
-        one single genre of a movie to decrease the rating for that movie. With the universal quantifier, instead,
-        the decrease increases with the number of genres of the movie that the user does not like. The more the number
-        of genres that the user does not like, the greater the decrease of the rating for that movie.
         :param likes_genre_model: model to be used for the LikesGenre function. This model is not learnable. It is a
         pre-trained model.
         :param likes_genre_path: path where the weights for the pre-trained LikesGenre model are stored.
         """
         # todo ricordarsi di freezare il predicato
         # todo costruire la item_genres_matrix
-        super(LTNTrainerMFGenresNew, self).__init__(mf_model, optimizer, alpha, p)
+        super(LTNTrainerMFGenresNew, self).__init__(mf_model, optimizer, alpha)
+        self.p_forall = p_forall
         item_genres_matrix = torch.tensor(item_genres_matrix.todense())
-        self.exists = exists
-        if exists:
-            self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier="e")
+        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(p=p_exists), quantifier="e")
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: item_genres_matrix[i_idx, g_idx])
@@ -445,43 +475,51 @@ class LTNTrainerMFGenresNew(LTNTrainerMF):
         self.LikesGenre = ltn.Function(likes_genre_model)
 
     def train_epoch(self, train_loader):
-        train_loss, f1_sat, f2_sat = 0.0, 0.0, 0.0
+        train_loss, train_sat_agg, f1_sat, f2_sat = 0.0, 0.0, 0.0, 0.0
         for batch_idx, ((u1, i1, r), (u2, i2, g, r_)) in enumerate(train_loader):
             self.optimizer.zero_grad()
             f1 = self.Forall(ltn.diag(u1, i1, r), self.Sim(self.Likes(u1, i1), r)).value
-            if not self.exists:
-                # todo qua c'e' il discorso di cambiare il p per concentrarsi moltissimo sugli outliers - perche' abbiamo veramente pochi esempi in cui la regola vale
-                # todo verificare perche' la regola non funziona. Sembrerebbe che le coppie utente item pescate a caso siano gia' negative, nel senso che, in media, all'utente non piace l'item
-                # todo sembrerebbe anche che, in media, agli utenti del batch non piacciano i generi che sono stati pescati
-                # todo HasGenre e' spesso falso e ci sta, il discorso e' che e' il per ogni che e' molto basso
-                # todo applicare solo da una certa epoca in poi -> questo potrebbe essere interessante
-                # todo filtrare i generi puo' essere un'idea, cosi diventa meno rara la soddisfazione automatica della regola e anche piu' accurato il predicato LikesGenre, che pio' essere addestrato con ndcg@1 se ci sono solo 18 generi
-                # todo pensare a tipologie di implicazione che non sono sempre vere a caso -> provare a dare un'occhiata al paper di Emilie
-                # todo per il sampling dovrei aumentare la probabilita' che all'utente piace un film, invece sembra che non sia cosi su quelli che pesco
-                # todo pensiamo bene alle varie parti della regola e a cosa puo' esserci che non va, possiamo fare affidamento su predicato appreso dei generi? E' veramente accurato?
-                # todo quali dovrebbero essere i valori di p? p puo' esserci utile per rendere meno vera la regola? Abbiamo sempre il problema che la premessa e' falsa. In piu' e' raro pescare qualcosa che all'utente piace e quindi la regola non si puo' applicare
-                # todo forse possiamo applicare anche la regola che se gli piace un genere allora gli piacciono i film di quel genere, questa meno strict dell'altra
-                # todo possiamo anche pensare di iniziare ad utilizzare queste regole piu' tardi durante il learning
-                # todo mi basta riuscire a mostrare che questa conoscenza e' utile e che LTN e' una maniera semplice di utilizzarla per fare in modo che ci possa essere un paper
-                # esistono dei tipi di implicazione attenti a queste cose o si possono creare?
-                f2 = self.Forall(ltn.diag(u2, i2),
-                                 self.Forall(g, self.Implies(
-                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)),
-                                     self.Sim(self.Likes(u2, i2), r_))), p=2).value
-            else:
-                f2 = self.Forall(ltn.diag(u2, i2),
-                                 self.Exists(g, self.Implies(
-                                     self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))), p=10),
-                                 self.Sim(self.Likes(u2, i2), r_), p=10).value
-            train_sat = self.sat_agg(f1, f2)
+            # todo qua c'e' il discorso di cambiare il p per concentrarsi moltissimo sugli outliers - perche' abbiamo veramente pochi esempi in cui la regola vale
+            # todo verificare perche' la regola non funziona. Sembrerebbe che le coppie utente item pescate a caso siano gia' negative, nel senso che, in media, all'utente non piace l'item
+            # todo sembrerebbe anche che, in media, agli utenti del batch non piacciano i generi che sono stati pescati
+            # todo HasGenre e' spesso falso e ci sta, il discorso e' che e' il per ogni che e' molto basso
+            # todo applicare solo da una certa epoca in poi -> questo potrebbe essere interessante
+            # todo filtrare i generi puo' essere un'idea, cosi diventa meno rara la soddisfazione automatica della regola e anche piu' accurato il predicato LikesGenre, che pio' essere addestrato con ndcg@1 se ci sono solo 18 generi
+            # todo pensare a tipologie di implicazione che non sono sempre vere a caso -> provare a dare un'occhiata al paper di Emilie
+            # todo per il sampling dovrei aumentare la probabilita' che all'utente piace un film, invece sembra che non sia cosi su quelli che pesco
+            # todo pensiamo bene alle varie parti della regola e a cosa puo' esserci che non va, possiamo fare affidamento su predicato appreso dei generi? E' veramente accurato?
+            # todo quali dovrebbero essere i valori di p? p puo' esserci utile per rendere meno vera la regola? Abbiamo sempre il problema che la premessa e' falsa. In piu' e' raro pescare qualcosa che all'utente piace e quindi la regola non si puo' applicare
+            # todo forse possiamo applicare anche la regola che se gli piace un genere allora gli piacciono i film di quel genere, questa meno strict dell'altra
+            # todo possiamo anche pensare di iniziare ad utilizzare queste regole piu' tardi durante il learning
+            # todo mi basta riuscire a mostrare che questa conoscenza e' utile e che LTN e' una maniera semplice di utilizzarla per fare in modo che ci possa essere un paper
+            # todo sarebbe figo anche far vedere con LTN che siccome la regola e' gia' soddisfatta dai dati, allora la MF e' in grado di apprendere l'informazione sui generi
+            # todo iniziare ad utilizzare la regola da un certo punto in poi o usare annealing
+            # esistono dei tipi di implicazione attenti a queste cose o si possono creare?
+            f2 = self.Forall(ltn.diag(u2, i2), self.Implies(
+                self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),
+                self.Sim(self.Likes(u2, i2), r_)), p=self.p_forall).value
+            print("self.Forall(ltn.diag(u2, i2), self.Sim(self.Likes(u2, i2), r_))")
+            print(self.Forall(ltn.diag(u2, i2), self.Sim(self.Likes(u2, i2), r_)).value)
+            print("self.Exists(g, self.Sim(self.LikesGenre(u2, g), r_))")
+            print(self.Exists(g, self.Sim(self.LikesGenre(u2, g), r_)).value)
+            print("self.Exists(g, self.HasGenre(i2, g))")
+            print(self.Exists(g, self.HasGenre(i2, g)).value)
+            print("self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)))")
+            print(self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))).value)
+            print("self.Implies(self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),self.Sim(self.Likes(u2, i2), r_))")
+            print(self.Implies(
+                self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),
+                self.Sim(self.Likes(u2, i2), r_)).value)
+            train_sat = f1  # self.sat_agg(f1, f2)
+            train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
-            train_loss += train_sat.item()
+            train_loss += loss.item()
             f1_sat += f1.item()
             f2_sat += f2.item()
 
-        return train_loss / len(train_loader), {"training_overall_sat": train_loss / len(train_loader),
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
                                                 "training_sat_axiom_1": f1_sat / len(train_loader),
                                                 "training_sat_axiom_2": f2_sat / len(train_loader)}
 
@@ -810,7 +848,7 @@ class LTNMFModel(Model):
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
                          "wd=%.4f,p=%d,alpha=%.3f" % (
-                         self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p, alpha)
+                             self.model_name, dataset_id, k, biased, lr, tr_batch_size, wd, p, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)
@@ -882,8 +920,8 @@ class LTNMFGenresModel(Model):
         # change run name for log purposes
         wandb_run.name = "grid_search:model=%s-dataset=%s-config:k=%d,biased=%d,lr=%.4f,tr_batch_size=%d," \
                          "wd=%.4f,p=%d,n_sampled_genres=%d,exists=%d,alpha=%.3f" % (
-                         self.model_name, dataset_id, k, biased, lr,
-                         tr_batch_size, wd, p, n_sampled_genres, exists, alpha)
+                             self.model_name, dataset_id, k, biased, lr,
+                             tr_batch_size, wd, p, n_sampled_genres, exists, alpha)
 
         # train model with current configuration
         model = MatrixFactorization(data.n_users, data.n_items, k, biased)

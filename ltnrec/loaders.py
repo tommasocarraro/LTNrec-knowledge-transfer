@@ -182,7 +182,7 @@ class TrainingDataLoaderLTNGenresNew:
                    # note that here we add self.n_items because we want to model genres after the movies in the MF model
                    ltn.Variable('genres', torch.randint(0, self.n_genres, size=(self.genre_sample_size,)),
                                 add_batch_dim=False),
-                   ltn.Constant(torch.tensor(0.)))
+                   ltn.Constant(torch.tensor(-1.)))
 
 
 class TrainingDataLoader:
@@ -217,6 +217,49 @@ class TrainingDataLoader:
         for _, start_idx in enumerate(range(0, n, self.batch_size)):
             end_idx = min(start_idx + self.batch_size, n)
             data = self.data[idxlist[start_idx:end_idx]]
+            u_i_pairs = data[:, :2]
+            ratings = data[:, -1]
+
+            yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
+
+
+class BalancedTrainingDataLoader:
+    """
+    A balanced version of the previous data loader. At each step, the same number of negative and positive interactions
+    are sampled. During one epoch, the same negative interactions will be seen multiple times.
+    """
+
+    def __init__(self,
+                 data,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        data = np.array(data)
+        self.positives = data[data[:, -1] == 1]
+        self.negatives = data[data[:, -1] == -1]
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.positives.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.positives.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            positives = self.positives[idxlist[start_idx:end_idx]]
+            negative_idx = np.random.randint(0, len(self.negatives), len(positives))
+            negatives = self.negatives[negative_idx]
+            data = np.concatenate((positives, negatives))
             u_i_pairs = data[:, :2]
             ratings = data[:, -1]
 
@@ -293,4 +336,41 @@ class ValDataLoaderExact:
             ground_truth = self.te_ui_matrix[self.te_u_ids[idxlist[start_idx:end_idx]]].toarray()
             mask = self.tr_ui_matrix[self.te_u_ids[idxlist[start_idx:end_idx]]].toarray()
 
-            yield self.te_u_ids[idxlist[start_idx:end_idx]], mask, ground_truth  # self.te_u_ids[idxlist[start_idx:end_idx]] torch.tensor(to_predict)
+            yield self.te_u_ids[idxlist[start_idx:end_idx]], mask, ground_truth
+
+
+class ValDataLoaderMSE:
+    """
+    Data loader to load the validation/test set of the MindReader dataset for measuring MSE of the validation ratings.
+    """
+
+    def __init__(self,
+                 data,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.data = np.array(data)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            data = self.data[idxlist[start_idx:end_idx]]
+            u_i_pairs = data[:, :2]
+            ratings = data[:, -1]
+
+            yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()

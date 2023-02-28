@@ -406,7 +406,7 @@ class DataManager:
         item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
         item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
 
-    def get_mr_genre_ratings(self, seed, k_filter=5, test_size=0.2, val_size=0.1):
+    def get_mr_genre_ratings(self, seed, genre_threshold=None, binary_ratings=True, k_filter=None, test_size=0.2, val_size=0.1, genre_val_size=0.2):
         """
         It creates the folds for training, validating, and testing a recommendation model on the MindReader dataset.
         Specifically, it follows the following procedure:
@@ -425,6 +425,10 @@ class DataManager:
         a csr sparse matrix.
 
         :param seed: seed for random reproducibility
+        :param genre_threshold: threshold to filter the genre ratings in such a way that only the most rated genres are
+        kept. This is done to reduce sparsity. The genres are sorted according to the number of ratings and then only
+        the top `genre_threshold` genres are kept
+        :param binary_ratings: whether the ratings have to be converted from [-1, 1] to [0, 1], or not
         :param k_filter: threshold used to filter the users and genres with less than 5 interactions
         :param test_size: proportion of user-movie positive ratings to be sampled from the dataset to construct
         the test set
@@ -444,21 +448,30 @@ class DataManager:
         # get ratings on movie genres and remove unknown ratings
         genre_ratings = mr_ratings[mr_ratings["uri"].isin(mr_genres) & mr_ratings["sentiment"] != 0]
         # convert negative ratings from -1 to 0
-        genre_ratings = genre_ratings.replace(-1, 0)
+        if binary_ratings:
+            genre_ratings = genre_ratings.replace(-1, 0)
+        if genre_threshold is not None:
+            # get the top `genre_threshold` most rated genres
+            most_rated_genres = list(genre_ratings.groupby(["uri"]).size().reset_index(
+                name='counts').sort_values(by=["counts"], ascending=False).head(genre_threshold)["uri"])
+            # the ratings only for the most rated genres
+            genre_ratings = genre_ratings[genre_ratings["uri"].isin(most_rated_genres)]
         # filter genres rated by less than 5 users and users who rated less than 5 genres to make movie genre
         # ratings less sparse
-        tmp1 = genre_ratings.groupby(['userId'], as_index=False)['uri'].count()
-        tmp1.rename(columns={'uri': 'cnt_item'}, inplace=True)
-        tmp2 = genre_ratings.groupby(['uri'], as_index=False)['userId'].count()
-        tmp2.rename(columns={'userId': 'cnt_user'}, inplace=True)
-        genre_ratings = genre_ratings.merge(tmp1, on=['userId']).merge(tmp2, on=['uri'])
-        genre_ratings = genre_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}')
-        genre_ratings = genre_ratings.drop(['cnt_item', 'cnt_user'], axis=1)
-        del tmp1, tmp2
+        if k_filter is not None:
+            tmp1 = genre_ratings.groupby(['userId'], as_index=False)['uri'].count()
+            tmp1.rename(columns={'uri': 'cnt_item'}, inplace=True)
+            tmp2 = genre_ratings.groupby(['uri'], as_index=False)['userId'].count()
+            tmp2.rename(columns={'userId': 'cnt_user'}, inplace=True)
+            genre_ratings = genre_ratings.merge(tmp1, on=['userId']).merge(tmp2, on=['uri'])
+            genre_ratings = genre_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}')
+            genre_ratings = genre_ratings.drop(['cnt_item', 'cnt_user'], axis=1)
+            del tmp1, tmp2
         # get ratings on movies - remove unknown ratings and convert negatives from -1 to 0
         mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
         movie_ratings = mr_ratings[mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0]
-        movie_ratings = movie_ratings.replace(-1, 0)
+        if binary_ratings:
+            movie_ratings = movie_ratings.replace(-1, 0)
         # get users who rated at least five genres
         users_rated_k_genres = genre_ratings["userId"].unique()
         # remove all the other users from the movie ratings
@@ -484,7 +497,7 @@ class DataManager:
         n_items = movie_ratings["uri"].nunique()
 
         # random sample one positive item for each user to create test set
-        def train_test_split(ratings, frac=None):
+        def train_test_split(ratings, frac=None, genres=False):
             """
             It splits the dataset into training and test sets.
 
@@ -496,7 +509,8 @@ class DataManager:
             """
             # filter the ratings in such a way that only the positives remain - we are interested in having positive
             # ratings in validation. We want to test how the recommendation places the target positive items
-            test_ids = ratings[ratings["sentiment"] == 1].groupby(by=["userId"]).apply(
+            # todo rimosso perche' non ci interessa fare ranking a noi sui generi [ratings["sentiment"] == 1]
+            test_ids = (ratings[ratings["sentiment"] == 1] if not genres else ratings).groupby(by=["userId"]).apply(
                 lambda x: x.sample(frac=frac, random_state=seed).index
             ).explode().values
             # remove NaN indexes - when pandas is not able to sample due to small group size and high frac, it returns
@@ -507,8 +521,7 @@ class DataManager:
             test_set = ratings.iloc[test_ids].reset_index(drop=True)
             return train_set, test_set
 
-        train_set_complete, test_set = train_test_split(genre_ratings)
-        train_set_small, val_set = train_test_split(train_set_complete)
+        train_set, val_set = train_test_split(genre_ratings, frac=genre_val_size, genres=True)
 
         # create numpy arrays of user-item ratings with interaction matrices
         def create_fold(fold, n_items):
@@ -528,10 +541,11 @@ class DataManager:
                     "matrix": csr_matrix((np.ones(len(fold)), (list(fold["userId"]), list(fold["uri"]))),
                                          shape=(n_users, n_items))}
 
-        genre_folds = {"train_set_complete": create_fold(train_set_complete, n_genres),
-                       "train_set_small": create_fold(train_set_small, n_genres),
-                       "val_set": create_fold(val_set, n_genres),
-                       "test_set": create_fold(test_set, n_genres)}
+        genre_folds = {"train_set": create_fold(train_set, n_genres),
+                       "val_set": create_fold(val_set, n_genres)}
+
+        # todo abbiamo un problema di sbilanciamento, abbiamo molti piu' rating negativi rispetto ai positivi,
+        #  quindi il modello e' incentivato a concentrarsi sui positivi
 
         train_set_complete, test_set = train_test_split(movie_ratings, frac=test_size)
         train_set_small, val_set = train_test_split(train_set_complete, frac=val_size)
