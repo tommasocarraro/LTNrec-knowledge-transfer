@@ -9,9 +9,11 @@ from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoader
     ValDataLoaderExact, ValDataLoaderMSE
 import json
 from torch.optim import Adam
-from ltnrec.utils import append_to_result_file, set_seed, remove_seed_from_dataset_name
+from ltnrec.utils import set_seed, remove_seed_from_dataset_name
 import wandb
 import pickle
+from sklearn.metrics import f1_score, precision_recall_fscore_support, confusion_matrix
+from torchmetrics import FBetaScore
 
 # create global wandb api object
 api = wandb.Api()
@@ -25,46 +27,157 @@ class MatrixFactorization(torch.nn.Module):
     embeddings of the items of the system.
     """
 
-    def __init__(self, n_users, n_items, n_factors, biased=False, weight_initializer=torch.nn.init.xavier_normal_):
+    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001, dropout_p=0., normalize=False):
         """
         Construction of the matrix factorization model.
         :param n_users: number of users in the dataset
         :param n_items: number of items in the dataset
         :param n_factors: size of embeddings for users and items
         :param biased: whether the MF model must include user and item biases or not, default to False
-        :param weight_initializer: method used to initialize the weights of the Matrix Factorization model. It has to be
-        in the torch.nn.init module.
         """
         super(MatrixFactorization, self).__init__()
+        self.dropout = torch.nn.Dropout(p=dropout_p)
         self.u_emb = torch.nn.Embedding(n_users, n_factors)
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
-        torch.nn.init.normal_(self.u_emb.weight, 0.0, 0.001)
-        torch.nn.init.normal_(self.i_emb.weight, 0.0, 0.001)
-        # weight_initializer(self.u_emb.weight)
-        # weight_initializer(self.i_emb.weight)
+        torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
+        torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
         self.biased = biased
         if biased:
             self.u_bias = torch.nn.Embedding(n_users, 1)
             self.i_bias = torch.nn.Embedding(n_items, 1)
-            torch.nn.init.normal_(self.u_bias.weight, 0.0, 0.001)
-            torch.nn.init.normal_(self.i_bias.weight, 0.0, 0.001)
-            # weight_initializer(self.u_bias.weight)
-            # weight_initializer(self.i_bias.weight)
-        self.sigmoid = torch.nn.Sigmoid()
+            torch.nn.init.normal_(self.u_bias.weight, 0.0, init_std)
+            torch.nn.init.normal_(self.i_bias.weight, 0.0, init_std)
+        self.normalize = normalize
+        if normalize:
+            self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, u_idx, i_idx, dim=1, normalize=False):
+    def forward(self, u_idx, i_idx, dim=1):
         """
         It computes the scores for the given user-item pairs using the matrix factorization approach (dot product).
         :param u_idx: users for which the score has to be computed
         :param i_idx: items for which the score has to be computed
         :param dim: dimension along which the dot product has to be computed
-        :param normalize: whether the output must be normalized in [0., 1.] (e.g., for a predicate) or not (logits)
         :return: predicted scores for given user-item pairs
         """
-        pred = torch.sum(self.u_emb(u_idx) * self.i_emb(i_idx), dim=dim, keepdim=True)
+        pred = torch.sum(self.dropout(self.u_emb(u_idx)) * self.dropout(self.i_emb(i_idx)), dim=dim, keepdim=True)
         if self.biased:
-            pred += self.u_bias(u_idx) + self.i_bias(i_idx)
-        return torch.sigmoid(pred.squeeze()) if normalize else pred.squeeze()
+            pred += self.dropout(self.u_bias(u_idx)) + self.dropout(self.i_bias(i_idx))
+        return pred.squeeze() if not self.normalize else self.sigmoid(pred.squeeze())
+
+
+class DeepMatrixFactorization(torch.nn.Module):
+    """
+    Deep Matrix factorization model.
+    The model is composed of two neural networks, one takes as input the user profile, and the other the item profile.
+    Then, a user and an item embeddings are generated. The score for a user-item pair is computed by the cosine
+    similarity between the two vectors.
+    """
+
+    def __init__(self, rating_matrix, n_layers, n_nodes_x_layer, act_func, n_factors, biased=False, init_std=0.001,
+                 dropout_p=0., cosine=True):
+        """
+        Construction of the deep matrix factorization model.
+        :param rating_matrix: user-item sparse matrix
+        :param n_layers: number of layers in the deep architecture
+        :param n_nodes_x_layer: number of nodes for each hidden layers
+        :param act_func: activation function used on each hidden layer
+        :param n_factors: size of embeddings for users and items
+        :param biased: whether to use user and item biased
+        :param init_std: standard deviation of the normal distribution used to initialize the model parameters
+        :param dropout_p: percentage of units to be shut down at each layer
+        :param cosine: whether to use cosine similarity or dot product to compute the final score
+        """
+        super(DeepMatrixFactorization, self).__init__()
+        self.dropout = torch.nn.Dropout(p=dropout_p)
+        self.rating_matrix = rating_matrix
+        common_sizes = [n_nodes_x_layer] * n_layers + [n_factors]
+        user_sizes = [rating_matrix.shape[0]] + common_sizes
+        item_sizes = [rating_matrix.shape[1]] + common_sizes
+        self.user_layers = torch.nn.ModuleList([torch.nn.Linear(item_sizes[i - 1], item_sizes[i])
+                                                for i in range(1, len(item_sizes))])
+        self.item_layers = torch.nn.ModuleList([torch.nn.Linear(user_sizes[i - 1], user_sizes[i])
+                                                for i in range(1, len(user_sizes))])
+        self.act_func = act_func
+        self.cosine = cosine
+        self.cosine_sim = torch.nn.CosineSimilarity()
+        self.dot_product = lambda u, i: torch.sum(u * i, dim=1, keepdim=True)
+        self.biased = biased
+        if biased and not cosine:
+            self.user_bias = torch.nn.Embedding(rating_matrix.shape[0], 1)
+            self.item_bias = torch.nn.Embedding(rating_matrix.shape[1], 1)
+        self.initialize(init_std)
+
+    def initialize(self, init_std):
+        for layer in self.user_layers:
+            torch.nn.init.normal_(layer.weight, 0.0, init_std)
+            torch.nn.init.normal_(layer.bias, 0.0, init_std)
+        for layer in self.item_layers:
+            torch.nn.init.normal_(layer.weight, 0.0, init_std)
+            torch.nn.init.normal_(layer.bias, 0.0, init_std)
+        if self.biased and not self.cosine:
+            torch.nn.init.normal_(self.user_bias.weight, 0.0, init_std)
+            torch.nn.init.normal_(self.item_bias.weight, 0.0, init_std)
+
+    def forward(self, u_idx, i_idx):
+        """
+        It computes the scores for the given user-item pairs using the deep matrix factorization model.
+        :param u_idx: users for which the score has to be computed
+        :param i_idx: items for which the score has to be computed
+        :return: predicted scores for given user-item pairs
+        """
+        # get user-item rating vectors
+        users = torch.tensor(self.rating_matrix[u_idx].toarray()).float()
+        items = torch.tensor(self.rating_matrix[:, i_idx].transpose().toarray()).float()
+        # compute user embedding
+        for i, layer in enumerate(self.user_layers):
+            self.dropout(users)
+            users = layer(users)
+            if i != len(self.user_layers) - 1:
+                users = self.act_func(users)
+        # compute item embedding
+        for i, layer in enumerate(self.item_layers):
+            self.dropout(items)
+            items = layer(items)
+            if i != len(self.item_layers) - 1:
+                items = self.act_func(items)
+        # compute user-item pair score
+        if self.biased and not self.cosine:
+            out = self.dot_product(users, items)
+            out += self.user_bias(u_idx) + self.item_bias(i_idx)
+            return out.squeeze()
+        else:
+            return self.cosine_sim(users, items)
+
+
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=0.2, gamma=2, reduction="mean"):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.bce = torch.nn.BCELoss()
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        bce_loss = self.bce(inputs, targets)
+        loss = torch.where(targets == 1,
+                           self.alpha * (1 - inputs) ** self.gamma * bce_loss,
+                           (1 - self.alpha) * inputs ** self.gamma * bce_loss)
+        return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
+
+
+class FocalLossRegression(torch.nn.Module):
+    def __init__(self, alpha=0.2, gamma=2, beta=0.5, reduction="mean"):
+        super(FocalLossRegression, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.beta = beta
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        loss = torch.where(targets == 1,
+                           self.alpha * (torch.abs(inputs - targets) / self.beta) ** self.gamma,
+                           (1 - self.alpha) * (torch.abs(inputs - targets) / self.beta) ** self.gamma)
+        return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
 
 
 class Trainer:
@@ -72,12 +185,13 @@ class Trainer:
     Abstract base class that any trainer must inherit from.
     """
 
-    def __init__(self, model, optimizer):
+    def __init__(self, model, optimizer, wandb_train=False):
         self.model = model
         self.optimizer = optimizer
+        self.wandb_train = wandb_train
 
     def train(self, train_loader, val_loader, val_metric=None, n_epochs=200, early=None, verbose=10, save_path=None,
-              model_name=None, wandb_train=False, val_loss_early=False):
+              model_name=None, val_loss_early=False):
         """
         Method for the train of the model.
         :param train_loader: data loader for training data
@@ -93,13 +207,14 @@ class Trainer:
         :param val_loss_early: whether to use early stopping based on the validation loss instead of the validation
         metric. Default to False, in the sense that is uses the validation metric.
         """
-        if wandb_train:
+        if self.wandb_train:
             # log gradients and parameters with Weights and Biases
             wandb.watch(self.model, log="all")
         best_val_score = 0.0 if not val_loss_early else sys.maxsize
         early_counter = 0
         if val_metric is not None:
-            check_metrics(val_metric)
+            if val_metric != "f-beta":
+                check_metrics(val_metric)
 
         for epoch in range(n_epochs):
             # training step
@@ -110,14 +225,14 @@ class Trainer:
             if (epoch + 1) % verbose == 0:
                 log_record = "Epoch %d - Train loss %.3f" % (epoch + 1, train_loss)
                 if val_metric is not None:
-                    log_record += " - Validation %s %.3f" % (val_metric, val_score)
+                    log_record += " - Val %s %.3f" % (val_metric, val_score)
                 else:
-                    log_record += " - Val loss %.3f" % (val_score)
+                    log_record += " - Val loss %.3f" % val_score
                 if model_name is not None:
                     # add model name to log information if model name is available
                     log_record = ("%s: " % (model_name,)) + log_record
                 print(log_record)
-                if wandb_train:
+                if self.wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
                     if val_metric is not None:
@@ -130,7 +245,7 @@ class Trainer:
             if val_loss_early:
                 if val_score < best_val_score:
                     best_val_score = val_score
-                    if wandb_train:
+                    if self.wandb_train:
                         wandb.log({"val_loss": best_val_score})
                     early_counter = 0
                     if save_path:
@@ -143,7 +258,7 @@ class Trainer:
             else:
                 if val_score > best_val_score:
                     best_val_score = val_score
-                    if wandb_train:
+                    if self.wandb_train:
                         wandb.log({"%s" % (val_metric,): val_score})
                     early_counter = 0
                     if save_path:
@@ -217,36 +332,26 @@ class MFTrainer(Trainer):
     ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, lam, scheduler=None):
+    def __init__(self, mf_model, optimizer, wandb_train, loss, threshold, beta):
         """
         Constructor of the trainer for the MF model.
         :param mf_model: Matrix Factorization model
         :param optimizer: optimizer used for the training of the model
+        :param loss: loss function that has to be used for the training of the model
         """
-        super(MFTrainer, self).__init__(mf_model, optimizer)
-        self.mse = torch.nn.MSELoss()
-        self.wmse = lambda pred, gt, w: torch.mean(w * torch.square(pred - gt))
-        self.lam = lam
-        self.scheduler = scheduler
+        super(MFTrainer, self).__init__(mf_model, optimizer, wandb_train)
+        self.loss = loss
+        self.threshold = threshold
+        self.beta = beta
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
         for batch_idx, (u_i_pairs, ratings) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            loss = self.mse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
+            loss = self.loss(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings)
             train_loss += loss.item()
-            # todo ricordarsi che qui ho messo la nuclear norm
-            loss += self.lam * (torch.sum(torch.square(self.model.i_emb.weight)) + torch.sum(torch.square(self.model.u_emb.weight)))# torch.sum(torch.linalg.svd(self.model.u_emb.weight)[1])
-            # loss += torch.sum(torch.linalg.svd(self.model.u_emb.weight)[1])
-            # loss += torch.sum(torch.linalg.svd(self.model.i_emb.weight)[1])
-            # todo ricordarsi che ho messo della regolarizzazione anche sui bias
-            if self.model.biased:
-                loss += self.lam * (torch.sum(torch.square(self.model.i_bias.weight)) + torch.sum(torch.square(self.model.u_bias.weight)))
-            # loss = self.wmse(self.model(u_i_pairs[:, 0], u_i_pairs[:, 1]), ratings, torch.where(ratings == -1., 20., 0.5))
             loss.backward()
             self.optimizer.step()
-        if self.scheduler is not None:
-            self.scheduler.step()
         return train_loss / len(train_loader), {"train_loss": train_loss / len(train_loader)}
 
     def predict(self, x, dim=1, normalize=False):
@@ -263,7 +368,7 @@ class MFTrainer(Trainer):
             return self.model(u_idx, i_idx, dim, normalize)
 
     def validate(self, val_loader, val_metric):
-        val_score = []
+        val_score, val_score_pos, val_score_neg = [], [], []
         if isinstance(val_loader, ValDataLoaderExact):
             for batch_idx, (val_users, mask, ground_truth) in enumerate(val_loader):
                 with torch.no_grad():
@@ -275,16 +380,53 @@ class MFTrainer(Trainer):
                     compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()),
                                    ground_truth))
         elif isinstance(val_loader, ValDataLoaderMSE):
+            preds_vector, gt_vector = [], []
             for batch_idx, (to_predict, ground_truth) in enumerate(val_loader):
                 with torch.no_grad():
-                    preds = self.model(to_predict[:, 0], to_predict[:, 1])
-                    # val_score.append(self.mse(preds, ground_truth))
-                    val_score.append(torch.square(preds - ground_truth))
+                    preds_vector.append(self.model(to_predict[:, 0], to_predict[:, 1]))
+                    gt_vector.append(ground_truth)
+            preds = np.concatenate(preds_vector)
+            # apply threshold
+            preds = preds >= self.threshold
+            gt = np.concatenate(gt_vector)
+            if val_metric == "f-beta":
+                # val_score.append((torch.round(preds) == ground_truth).float())
+                # todo spostare il decision boundary piu' giu' perche' ho 0.47 per negativi e 0.65 per positivi in media
+                # I want to give more weight to precision in the F1 because I need to be precised for using the metric
+                prec, rec, val_score, _ = precision_recall_fscore_support(gt, preds, beta=self.beta, average="binary",
+                                                                          pos_label=0)
+                p, r, f, _ = precision_recall_fscore_support(gt, preds, beta=self.beta, average=None)
+                print("Neg prec %.3f - Pos prec %.3f - Neg rec %.3f - "
+                      "Pos rec %.3f - Neg f %.3f - Pos f %.3f" % (p[0], p[1], r[0], r[1], f[0], f[1]))
+
+                # print("tn %.2f - fp %.2f - fn %.2f - tp %.2f" % tuple(confusion_matrix(gt, preds, normalize="true").ravel()))
+                tn, fp, fn, tp = tuple(confusion_matrix(gt, preds).ravel())
+                sensitivity, specificity = tp / (tp + fn), tn / (tn + fp)
+                print("tn %d - fp %d - fn %d - tp %d" % (tn, fp, fn, tp))
+                print("sensitivity %.3f - specificity %.3f" % (sensitivity, specificity))
+                if self.wandb_train:
+                    wandb.log({
+                        "neg_prec": p[0],
+                        "pos_prec": p[1],
+                        "neg_rec": r[0],
+                        "pos_rec": r[1],
+                        "neg_f": f[0],
+                        "pos_f": f[1],
+                        "tn": tn,
+                        "fp": fp,
+                        "fn": fn,
+                        "tp": tp,
+                        "sensitivity": sensitivity,
+                        "specificity": specificity
+                    })
+            else:
+                val_score = self.loss(preds, gt)
         else:
             for batch_idx, (data, ground_truth) in enumerate(val_loader):
                 predicted_scores = self.predict(data.view(-1, 2))
                 val_score.append(compute_metric(val_metric, predicted_scores.numpy(), ground_truth))
-        return np.mean(np.concatenate(val_score))
+
+        return val_score
 
     def test(self, test_loader, metrics):
         check_metrics(metrics)
