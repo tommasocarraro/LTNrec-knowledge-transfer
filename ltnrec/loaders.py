@@ -1,10 +1,13 @@
+import random
+
 import numpy as np
 import torch
 import ltn
-import time
+import pandas as pd
+import itertools
 
 
-class TrainingDataLoaderLTN:
+class TrainingDataLoaderLTNRegression:
     """
     Data loader to load the training set of the dataset. It creates batches and wrap them inside LTN
     variables ready for the learning.
@@ -40,6 +43,47 @@ class TrainingDataLoaderLTN:
             yield ltn.Variable('users', torch.tensor(data[:, 0]), add_batch_dim=False), \
                   ltn.Variable('items', torch.tensor(data[:, 1]), add_batch_dim=False), \
                   ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)
+
+
+class TrainingDataLoaderLTNClassification:
+    """
+    Data loader to load the training set of the dataset. It creates batches and wrap them inside LTN
+    variables ready for the learning.
+    """
+
+    def __init__(self,
+                 data,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.data = np.array(data)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            data = self.data[idxlist[start_idx:end_idx]]
+            pos_ex = data[data[:, -1] == 1]
+            neg_ex = data[data[:, -1] != 1]
+
+            yield (ltn.Variable('users_pos', torch.tensor(pos_ex[:, 0]), add_batch_dim=False),
+                   ltn.Variable('items_pos', torch.tensor(pos_ex[:, 1]), add_batch_dim=False)), \
+                  (ltn.Variable('users_neg', torch.tensor(neg_ex[:, 0]), add_batch_dim=False),
+                   ltn.Variable('items_neg', torch.tensor(neg_ex[:, 1]), add_batch_dim=False))
 
 
 class TrainingDataLoaderLTNGenres:
@@ -223,6 +267,71 @@ class TrainingDataLoader:
             yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
 
 
+class TrainingDataLoaderBPR:
+    """
+    Data loader designed to provide batches for learning a MF model with Bayesian Personalized Ranking.
+    """
+
+    def __init__(self,
+                 data,
+                 u_i_matrix,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param u_i_matrix: sparse user-item interaction matrix with 1 if user has interacted the item and 0 otherwise.
+        It is used internally to sample non-relevant items for the training user that do not have negative items.
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.u_i_matrix = u_i_matrix
+        self.data = self.prepare_data(data)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def prepare_data(self, data):
+        data = pd.DataFrame(data, columns=['userId', 'uri', 'sentiment'])
+        training_pairs = []
+        users = data.groupby(["userId"])
+        for user, user_ratings in users:
+            pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
+            neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
+            # check that at least one example can be constructed for the current user
+            if len(pos_ratings) >= 1 and len(neg_ratings) >= 1:
+                training_pairs.extend([[[user, pos], [user, neg]]
+                                       for pos, neg in list(itertools.product(pos_ratings["uri"],
+                                                                              neg_ratings["uri"]))])
+            else:
+                # here, we sample one non-relevant item for each positive interaction of the user since we do not have
+                # negative items for the current user
+                # the probability of sampling a negative item is really high due to the high sparsity
+                # very often, we can assume that non-relevant items are negative items
+                # the problem is that they remain the same for all epochs, so there could be a bias on the selected
+                # items. Performing experiments with more seeds is imperative in this case
+                # todo there is a user for which we do not have examples because he has only negative examples in the
+                #  training set. The validation on this user will be very challening but it is just a user
+                if len(pos_ratings) >= 1 and len(neg_ratings) == 0:
+                    training_pairs.extend([[[user, pos],
+                                            [user, random.choice(list(set(range(self.u_i_matrix.shape[1])) -
+                                             set(self.u_i_matrix[user].nonzero()[1])))]]
+                                           for pos in list(pos_ratings["uri"])])
+        return np.array(training_pairs)
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            yield torch.tensor(self.data[idxlist[start_idx:end_idx]])
+
+
 class BalancedTrainingDataLoader:
     """
     A balanced version of the previous data loader. At each step, the same number of negative and positive interactions
@@ -313,7 +422,7 @@ class BalancedTrainingDataLoaderNeg:
             yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
 
 
-class ValDataLoader:
+class ValDataLoaderRanking:
     """
     Data loader to load the validation/test set of the MindReader dataset.
     """
@@ -386,7 +495,7 @@ class ValDataLoaderExact:
             yield self.te_u_ids[idxlist[start_idx:end_idx]], mask, ground_truth
 
 
-class ValDataLoaderMSE:
+class ValDataLoaderRatings:
     """
     Data loader to load the validation/test set of the MindReader dataset for measuring MSE of the validation ratings.
     """
@@ -420,4 +529,4 @@ class ValDataLoaderMSE:
             u_i_pairs = data[:, :2]
             ratings = data[:, -1]
 
-            yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
+            yield torch.tensor(u_i_pairs), np.array(ratings).astype(np.float64)

@@ -5,19 +5,33 @@ import ltn
 import torch
 import numpy as np
 from ltnrec.metrics import compute_metric, check_metrics
-from ltnrec.loaders import ValDataLoader, TrainingDataLoader, TrainingDataLoaderLTN, TrainingDataLoaderLTNGenres, \
-    ValDataLoaderExact, ValDataLoaderMSE
+from ltnrec.loaders import ValDataLoaderRatings, TrainingDataLoader, TrainingDataLoaderLTNGenres, ValDataLoaderRanking
 import json
 from torch.optim import Adam
 from ltnrec.utils import set_seed, remove_seed_from_dataset_name
 import wandb
 import pickle
 from sklearn.metrics import f1_score, precision_recall_fscore_support, confusion_matrix
-from torchmetrics import FBetaScore
 
 # create global wandb api object
 api = wandb.Api()
 api.entity = "bmxitalia"
+
+
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=0.2, gamma=2, reduction="mean"):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.bce = torch.nn.BCELoss()
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        bce_loss = self.bce(inputs, targets)
+        loss = torch.where(targets == 1,
+                           self.alpha * (1 - inputs) ** self.gamma * bce_loss,
+                           (1 - self.alpha) * inputs ** self.gamma * bce_loss)
+        return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
 
 
 class MatrixFactorization(torch.nn.Module):
@@ -149,37 +163,6 @@ class DeepMatrixFactorization(torch.nn.Module):
             return self.cosine_sim(users, items)
 
 
-class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha=0.2, gamma=2, reduction="mean"):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.bce = torch.nn.BCELoss()
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        bce_loss = self.bce(inputs, targets)
-        loss = torch.where(targets == 1,
-                           self.alpha * (1 - inputs) ** self.gamma * bce_loss,
-                           (1 - self.alpha) * inputs ** self.gamma * bce_loss)
-        return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
-
-
-class FocalLossRegression(torch.nn.Module):
-    def __init__(self, alpha=0.2, gamma=2, beta=0.5, reduction="mean"):
-        super(FocalLossRegression, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.beta = beta
-        self.reduction = reduction
-
-    def forward(self, inputs, targets):
-        loss = torch.where(targets == 1,
-                           self.alpha * (torch.abs(inputs - targets) / self.beta) ** self.gamma,
-                           (1 - self.alpha) * (torch.abs(inputs - targets) / self.beta) ** self.gamma)
-        return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
-
-
 class Trainer:
     """
     Abstract base class that any trainer must inherit from.
@@ -191,7 +174,7 @@ class Trainer:
         self.wandb_train = wandb_train
 
     def train(self, train_loader, val_loader, val_metric=None, n_epochs=200, early=None, verbose=10, save_path=None,
-              model_name=None, val_loss_early=False):
+              model_name=None):
         """
         Method for the train of the model.
         :param train_loader: data loader for training data
@@ -203,18 +186,15 @@ class Trainer:
         :param save_path: path where to save the best model, default to None
         :param model_name: name of model. It is used for printing model information in the log. It is useful when
         concurrency is used to train simultaneously, so we need to distinguish among different concurrent runs
-        :param wandb_train: whether the training is done with Weights and Biases or not
-        :param val_loss_early: whether to use early stopping based on the validation loss instead of the validation
-        metric. Default to False, in the sense that is uses the validation metric.
         """
+        if val_metric is not None:
+            check_metrics(val_metric)
+        # if a regression metric is used, it has to be minimized
+        best_val_score = sys.maxsize if "mse" in val_metric else 0.0
+        early_counter = 0
         if self.wandb_train:
             # log gradients and parameters with Weights and Biases
             wandb.watch(self.model, log="all")
-        best_val_score = 0.0 if not val_loss_early else sys.maxsize
-        early_counter = 0
-        if val_metric is not None:
-            if val_metric != "f-beta":
-                check_metrics(val_metric)
 
         for epoch in range(n_epochs):
             # training step
@@ -223,51 +203,33 @@ class Trainer:
             val_score = self.validate(val_loader, val_metric)
             # print epoch data
             if (epoch + 1) % verbose == 0:
-                log_record = "Epoch %d - Train loss %.3f" % (epoch + 1, train_loss)
-                if val_metric is not None:
-                    log_record += " - Val %s %.3f" % (val_metric, val_score)
-                else:
-                    log_record += " - Val loss %.3f" % val_score
+                log_record = "Epoch %d - Train loss %.3f - Val %s %.3f" % (epoch + 1, train_loss, val_metric, val_score)
                 if model_name is not None:
                     # add model name to log information if model name is available
                     log_record = ("%s: " % (model_name,)) + log_record
+                # print epoch report
                 print(log_record)
                 if self.wandb_train:
                     # add to the log_dict returned from the training of the epoch (this information is different for
                     # every model) the information about the validation metric
-                    if val_metric is not None:
-                        wandb.log({"smooth_%s" % (val_metric,): val_score})
-                    else:
-                        wandb.log({"smooth_val_loss": val_score})
+                    wandb.log({"smooth_%s" % (val_metric,): val_score})
                     # log all stored information
                     wandb.log(log_dict)
             # save best model and update early stop counter, if necessary
-            if val_loss_early:
-                if val_score < best_val_score:
-                    best_val_score = val_score
-                    if self.wandb_train:
-                        wandb.log({"val_loss": best_val_score})
-                    early_counter = 0
-                    if save_path:
-                        self.save_model(save_path)
-                else:
-                    early_counter += 1
-                    if early is not None and early_counter > early:
-                        print("Training interrupted due to early stopping")
-                        break
+            if ("mse" in val_metric and val_score < best_val_score) or \
+                    ("mse" not in val_metric and val_score > best_val_score):
+                best_val_score = val_score
+                if self.wandb_train:
+                    # the metric is logged only when a new best value is achieved for it
+                    wandb.log({"%s" % (val_metric,): val_score})
+                early_counter = 0
+                if save_path:
+                    self.save_model(save_path)
             else:
-                if val_score > best_val_score:
-                    best_val_score = val_score
-                    if self.wandb_train:
-                        wandb.log({"%s" % (val_metric,): val_score})
-                    early_counter = 0
-                    if save_path:
-                        self.save_model(save_path)
-                else:
-                    early_counter += 1
-                    if early is not None and early_counter > early:
-                        print("Training interrupted due to early stopping")
-                        break
+                early_counter += 1
+                if early is not None and early_counter > early:
+                    print("Training interrupted due to early stopping")
+                    break
 
     def train_epoch(self, train_loader):
         """
@@ -292,9 +254,64 @@ class Trainer:
         Method for validating the model.
         :param val_loader: data loader for validation data
         :param val_metric: validation metric name
-        :return: validation score based on the given metric averaged across validation batches
+        :return: validation score based on the given metric averaged across all validation examples
         """
-        raise NotImplementedError()
+        val_score, preds_vector, gt_vector = [], [], []
+        if "@" in val_metric or val_metric == "auc":
+            assert isinstance(val_loader, ValDataLoaderRanking), "You selected a ranking-based metric as validation" \
+                                                                 "metric but your are not using the " \
+                                                                 "ValDataLoaderRanking."
+            for batch_idx, (X, y) in enumerate(val_loader):
+                preds = self.predict(X.view(-1, 2))
+                val_score.append(compute_metric(val_metric, preds.numpy().reshape(y.shape), y))
+            val_score = np.mean(np.concatenate(val_score))
+        else:
+            assert isinstance(val_loader, ValDataLoaderRatings), "You selected a regression or classification metric" \
+                                                                  "as validation metric but you are not using the " \
+                                                                  "ValDataLoaderRatings."
+            for batch_idx, (X, y) in enumerate(val_loader):
+                if "fbeta" not in val_metric and val_metric != "acc":
+                    preds = self.predict(X)
+                    val_score.append(compute_metric(val_metric, preds.numpy(), y))
+                else:
+                    preds = self.predict(X, binarize=True)
+                    preds_vector.append(preds)
+                    gt_vector.append(y)
+            if "fbeta" not in val_metric and val_metric != "acc":
+                val_score = np.mean(np.concatenate(val_score))
+                if val_metric == "rmse":
+                    val_score = np.sqrt(val_score)
+            else:
+                preds_vector = np.concatenate(preds_vector)
+                gt_vector = np.concatenate(gt_vector)
+                val_score = compute_metric(val_metric, preds_vector, gt_vector)
+                p, r, f, _ = precision_recall_fscore_support(gt_vector, preds_vector,
+                                                             beta=float(val_metric.split("-")[1])
+                                                             if "fbeta" in val_metric else 1.0, average=None)
+                print("Neg prec %.3f - Pos prec %.3f - Neg rec %.3f - "
+                      "Pos rec %.3f - Neg f %.3f - Pos f %.3f" % (p[0], p[1], r[0], r[1], f[0], f[1]))
+
+                tn, fp, fn, tp = tuple(confusion_matrix(gt_vector, preds_vector).ravel())
+                sensitivity, specificity = tp / (tp + fn), tn / (tn + fp)
+                print("tn %d - fp %d - fn %d - tp %d" % (tn, fp, fn, tp))
+                print("sensitivity %.3f - specificity %.3f" % (sensitivity, specificity))
+                if self.wandb_train:
+                    wandb.log({
+                        "neg_prec": p[0],
+                        "pos_prec": p[1],
+                        "neg_rec": r[0],
+                        "pos_rec": r[1],
+                        "neg_f": f[0],
+                        "pos_f": f[1],
+                        "tn": tn,
+                        "fp": fp,
+                        "fn": fn,
+                        "tp": tp,
+                        "sensitivity": sensitivity,
+                        "specificity": specificity
+                    })
+
+        return val_score
 
     def save_model(self, path):
         """
@@ -322,29 +339,53 @@ class Trainer:
         :param metrics: metric name or list of metrics' names that have to be computed
         :return: a dictionary containing the value of each metric average across the test batches
         """
-        raise NotImplementedError()
+        pass
+        # check_metrics(metrics)
+        # if isinstance(metrics, str):
+        #     metrics = [metrics]
+        #
+        # results = {m: [] for m in metrics}
+        # if isinstance(test_loader, ValDataLoaderExact):
+        #     with torch.no_grad():
+        #         predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
+        #         if self.model.biased:
+        #             predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
+        #             predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
+        #     for batch_idx, (test_users, mask, ground_truth) in enumerate(test_loader):
+        #         for m in results:
+        #             results[m].append(
+        #                 compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()),
+        #                                ground_truth))
+        #     # for batch_idx, (data, mask, ground_truth) in enumerate(test_loader):
+        #     #     for m in results:
+        #     # predicted_scores = self.predict(data.view(-1, 2))
+        #     # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
+        #     #                                  ground_truth))
+        # else:
+        #     for batch_idx, (data, ground_truth) in enumerate(test_loader):
+        #         for m in results:
+        #             predicted_scores = self.predict(data.view(-1, 2))
+        #             results[m].append(
+        #                 compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
+        # for m in results:
+        #     results[m] = np.mean(np.concatenate(results[m]))
+        # return results
 
 
 class MFTrainer(Trainer):
-    """
-    Trainer for the Matrix Factorization model.
-    The objective of the Matrix Factorization is to minimize the MSE between the predictions of the model and the
-    ground truth.
-    """
-
-    def __init__(self, mf_model, optimizer, wandb_train, loss, threshold, beta):
+    def __init__(self, mf_model, optimizer, loss, wandb_train=False):
         """
         Constructor of the trainer for the MF model.
         :param mf_model: Matrix Factorization model
         :param optimizer: optimizer used for the training of the model
-        :param loss: loss function that has to be used for the training of the model
+        :param wandb_train: whether the data has to be logged to WandB or not
+        :param loss: loss that is used for traininng the Matrix Factorization model
         """
         super(MFTrainer, self).__init__(mf_model, optimizer, wandb_train)
         self.loss = loss
-        self.threshold = threshold
-        self.beta = beta
 
     def train_epoch(self, train_loader):
+        # todo qui devo capire come usare la loss
         train_loss = 0.0
         for batch_idx, (u_i_pairs, ratings) in enumerate(train_loader):
             self.optimizer.zero_grad()
@@ -354,114 +395,122 @@ class MFTrainer(Trainer):
             self.optimizer.step()
         return train_loss / len(train_loader), {"train_loss": train_loss / len(train_loader)}
 
-    def predict(self, x, dim=1, normalize=False):
+
+class MFTrainerBPR(Trainer):
+    def __init__(self, mf_model, optimizer, wandb_train=False):
+        """
+        Constructor of the trainer for the MF model.
+        :param mf_model: Matrix Factorization model
+        :param optimizer: optimizer used for the training of the model
+        :param wandb_train: whether the data has to be logged to WandB or not
+        :param loss: loss that is used for traininng the Matrix Factorization model
+        """
+        super(MFTrainerBPR, self).__init__(mf_model, optimizer, wandb_train)
+        self.act_func = torch.nn.LogSigmoid()
+        self.loss = lambda pos, neg: -torch.sum(self.act_func(pos - neg))
+
+    def train_epoch(self, train_loader):
+        train_loss = 0.0
+        for batch_idx, (u_i_pairs) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            feed_pairs = u_i_pairs.view(-1, 2)
+            preds = self.model(feed_pairs[:, 0], feed_pairs[:, 1])
+            preds = preds.view(u_i_pairs.shape[0], 2)
+            loss = self.loss(preds[:, 0], preds[:, 1])
+            train_loss += loss.item()
+            loss.backward()
+            self.optimizer.step()
+        return train_loss / len(train_loader), {"train_loss": train_loss / len(train_loader)}
+
+    def predict(self, x, dim=1, **kwargs):
         """
         Method for performing a prediction of the model.
         :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
         is the user index, while the second position is the item index
         :param dim: dimension across which the dot product of the MF has to be computed
-        :param normalize: whether to normalize the prediction in the range [0., 1.]
         :return: the prediction of the model for the given user-item pair
         """
         u_idx, i_idx = x[:, 0], x[:, 1]
         with torch.no_grad():
-            return self.model(u_idx, i_idx, dim, normalize)
+            return self.model(u_idx, i_idx, dim)
 
-    def validate(self, val_loader, val_metric):
-        val_score, val_score_pos, val_score_neg = [], [], []
-        if isinstance(val_loader, ValDataLoaderExact):
-            for batch_idx, (val_users, mask, ground_truth) in enumerate(val_loader):
-                with torch.no_grad():
-                    predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
-                    if self.model.biased:
-                        predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
-                        predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
-                val_score.append(
-                    compute_metric(val_metric, np.where(mask == 1, -np.inf, predicted_scores[val_users].numpy()),
-                                   ground_truth))
-        elif isinstance(val_loader, ValDataLoaderMSE):
-            preds_vector, gt_vector = [], []
-            for batch_idx, (to_predict, ground_truth) in enumerate(val_loader):
-                with torch.no_grad():
-                    preds_vector.append(self.model(to_predict[:, 0], to_predict[:, 1]))
-                    gt_vector.append(ground_truth)
-            preds = np.concatenate(preds_vector)
-            # apply threshold
-            preds = preds >= self.threshold
-            gt = np.concatenate(gt_vector)
-            if val_metric == "f-beta":
-                # val_score.append((torch.round(preds) == ground_truth).float())
-                # todo spostare il decision boundary piu' giu' perche' ho 0.47 per negativi e 0.65 per positivi in media
-                # I want to give more weight to precision in the F1 because I need to be precised for using the metric
-                prec, rec, val_score, _ = precision_recall_fscore_support(gt, preds, beta=self.beta, average="binary",
-                                                                          pos_label=0)
-                p, r, f, _ = precision_recall_fscore_support(gt, preds, beta=self.beta, average=None)
-                print("Neg prec %.3f - Pos prec %.3f - Neg rec %.3f - "
-                      "Pos rec %.3f - Neg f %.3f - Pos f %.3f" % (p[0], p[1], r[0], r[1], f[0], f[1]))
 
-                # print("tn %.2f - fp %.2f - fn %.2f - tp %.2f" % tuple(confusion_matrix(gt, preds, normalize="true").ravel()))
-                tn, fp, fn, tp = tuple(confusion_matrix(gt, preds).ravel())
-                sensitivity, specificity = tp / (tp + fn), tn / (tn + fp)
-                print("tn %d - fp %d - fn %d - tp %d" % (tn, fp, fn, tp))
-                print("sensitivity %.3f - specificity %.3f" % (sensitivity, specificity))
-                if self.wandb_train:
-                    wandb.log({
-                        "neg_prec": p[0],
-                        "pos_prec": p[1],
-                        "neg_rec": r[0],
-                        "pos_rec": r[1],
-                        "neg_f": f[0],
-                        "pos_f": f[1],
-                        "tn": tn,
-                        "fp": fp,
-                        "fn": fn,
-                        "tp": tp,
-                        "sensitivity": sensitivity,
-                        "specificity": specificity
-                    })
-            else:
-                val_score = self.loss(preds, gt)
-        else:
-            for batch_idx, (data, ground_truth) in enumerate(val_loader):
-                predicted_scores = self.predict(data.view(-1, 2))
-                val_score.append(compute_metric(val_metric, predicted_scores.numpy(), ground_truth))
+class MFTrainerRegression(MFTrainer):
+    """
+    Trainer for the Matrix Factorization model.
 
-        return val_score
+    This version of the trainer uses the MSE as loss function. It implements a regression task, where the objective
+    is to minimize the distance between target and predicted ratings.
+    """
 
-    def test(self, test_loader, metrics):
-        check_metrics(metrics)
-        if isinstance(metrics, str):
-            metrics = [metrics]
+    def __init__(self, mf_model, optimizer, loss=torch.nn.MSELoss(), wandb_train=False):
+        """
+        Constructor of the trainer for the MF model.
+        :param mf_model: Matrix Factorization model
+        :param optimizer: optimizer used for the training of the model
+        :param wandb_train: whether the data has to be logged to WandB or not
+        """
+        super(MFTrainerRegression, self).__init__(mf_model, optimizer, loss, wandb_train)
 
-        results = {m: [] for m in metrics}
-        if isinstance(test_loader, ValDataLoaderExact):
-            with torch.no_grad():
-                predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
-                if self.model.biased:
-                    predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
-                    predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
-            for batch_idx, (test_users, mask, ground_truth) in enumerate(test_loader):
-                for m in results:
-                    results[m].append(
-                        compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()),
-                                       ground_truth))
-            # for batch_idx, (data, mask, ground_truth) in enumerate(test_loader):
-            #     for m in results:
-            # predicted_scores = self.predict(data.view(-1, 2))
-            # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
-            #                                  ground_truth))
-        else:
-            for batch_idx, (data, ground_truth) in enumerate(test_loader):
-                for m in results:
-                    predicted_scores = self.predict(data.view(-1, 2))
-                    results[m].append(
-                        compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
-        for m in results:
-            results[m] = np.mean(np.concatenate(results[m]))
-        return results
+    def predict(self, x, dim=1, **kwargs):
+        """
+        Method for performing a prediction of the model.
+        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
+        is the user index, while the second position is the item index
+        :param dim: dimension across which the dot product of the MF has to be computed
+        :return: the prediction of the model for the given user-item pair
+        """
+        u_idx, i_idx = x[:, 0], x[:, 1]
+        with torch.no_grad():
+            return self.model(u_idx, i_idx, dim)
+
+
+class MFTrainerClassifier(MFTrainer):
+    """
+    Trainer for the Matrix Factorization model.
+
+    This version of the trainer uses the focal loss as loss function. It implements a classification task, where the
+    objective is to minimize the focal loss. The ratings are binary, hence they can be interpreted as binary classes.
+    The objective is to discriminate between class 1 ("likes") and class 0/-1 ("dislikes").
+
+    The focal loss is used since it is a generalization of binary cross entropy used to mitigate the class imbalance
+    problem.
+    """
+
+    def __init__(self, mf_model, optimizer, loss=FocalLoss(alpha=0.5, gamma=0, reduction="mean"), wandb_train=False,
+                 threshold=0.5):
+        """
+        Constructor of the trainer for the MF model.
+        :param mf_model: Matrix Factorization model
+        :param optimizer: optimizer used for the training of the model
+        :param loss: loss function used to train the model
+        :param wandb_train: whether the data has to be logged to WandB or not
+        :param threshold: threshold used to determine whether an example is negative or positive
+        """
+        super(MFTrainerClassifier, self).__init__(mf_model, optimizer, loss, wandb_train)
+        self.threshold = threshold
+
+    def predict(self, x, dim=1, binarize=False):
+        """
+        Method for performing a prediction of the model.
+        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
+        is the user index, while the second position is the item index
+        :param dim: dimension across which the dot product of the MF has to be computed
+        :param binarize: whether the prediction has to be binarized using the decision boundary. This is useful because
+        some metrics requires the binarization, while other not
+        :return: the prediction of the model for the given user-item pair
+        """
+        u_idx, i_idx = x[:, 0], x[:, 1]
+        with torch.no_grad():
+            preds = self.model(u_idx, i_idx, dim)
+            if binarize:
+                preds = preds >= self.threshold
+            return preds
 
 
 class LTNTrainerMF(MFTrainer):
+    # todo qui semplicemente posso estendere uno degli ultimi due fatti e sovrascrivere il metodo train_epoch con le
+    #  cose che servono a me
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function.
     The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
@@ -480,6 +529,41 @@ class LTNTrainerMF(MFTrainer):
         :param alpha: coefficient of smooth equality predicate
         """
         super(LTNTrainerMF, self).__init__(mf_model, optimizer)
+        self.Likes = ltn.Function(self.model)
+        self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
+        self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
+        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(), quantifier='f')
+        self.sat_agg = ltn.fuzzy_ops.SatAgg()
+        self.scheduler = scheduler
+
+    def train_epoch(self, train_loader):
+        train_loss, train_sat_agg = 0.0, 0.0
+        for batch_idx, (u, i, r) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            train_sat = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r)).value
+            train_sat_agg += train_sat.item()
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += loss.item()
+        if self.scheduler is not None:
+            self.scheduler.step()
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
+
+
+class LTNTrainerMFClassifier(MFTrainer):
+    """
+    Same trainer as the previous one, but for classification.
+    """
+
+    def __init__(self, mf_model, optimizer, alpha, scheduler=None):
+        """
+        Constructor of the trainer for the LTN with MF as base model.
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param alpha: coefficient of smooth equality predicate
+        """
+        super(LTNTrainerMFClassifier, self).__init__(mf_model, optimizer)
         self.Likes = ltn.Function(self.model)
         self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())

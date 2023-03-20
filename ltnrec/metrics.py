@@ -1,5 +1,8 @@
 import numpy as np
-valid_metrics = ['ndcg', 'recall', 'hit']
+from sklearn.metrics import fbeta_score, accuracy_score
+valid_metrics = ['ndcg', 'recall', 'hit', 'auc', 'mse', 'rmse', 'fbeta', 'acc']
+# todo da notare che precision e recall non hanno alcun senso in caso di leave-one-out evaluation perche' il target
+#  item e' sempre uno, quindi, se l'unico target item e' nei primi k, la precision vale 1/k e la recall vale 1
 
 
 def hit_at_k(pred_scores, ground_truth, k=10):
@@ -61,6 +64,70 @@ def recall_at_k(pred_scores, ground_truth, k=10):
     return rank_relevance.sum(axis=1) / np.minimum(k, ground_truth.sum(axis=1))
 
 
+def auc(pred_scores, ground_truth=None):
+    """
+    Computes the AUC of the given prediction scores.
+
+    The given scores must be of shape n_examples x 2. The first score is the score for the positive item, the second
+    score is the score for the negative item.
+
+    The AUC counts the number of times that the positive item is ranked above the negative item.
+
+    :param pred_scores: predicted scores for positive-negative pairs
+    :return: AUC for each user
+    """
+    assert pred_scores.shape[1] == 2, "dim 1 must be of shape 2. There should be one positive and one negative item."
+    return pred_scores[:, 1] > pred_scores[:, 0]
+
+
+def mse(pred_scores, ground_truth):
+    """
+    Computes the Mean Squared Error between predicted and target ratings.
+
+    :param pred_scores: predicted scores for validation user-item pairs
+    :param ground_truth: target ratings for validation user-item pairs
+    :return: Squared error for each user
+    """
+    assert pred_scores.shape == ground_truth.shape, "predictions and targets must match in shape."
+    return np.square(pred_scores - ground_truth)
+
+
+def fbeta(pred_scores, ground_truth, beta):
+    """
+    Computes the f beta measure between predictions and targets with the given beta value.
+
+    :param pred_scores: predicted scores for validation user-item pairs
+    :param ground_truth: target ratings for validation user-item pairs
+    :return: fbeta measure
+    """
+    return fbeta_score(ground_truth, pred_scores, beta=beta,
+                       pos_label=(0 if 0 in ground_truth else -1), average='binary')
+
+
+def acc(pred_scores, ground_truth):
+    """
+    Computes the accuracy between predictions and targets.
+
+    :param pred_scores: predicted scores for validation user-item pairs
+    :param ground_truth: target ratings for validation user-item pairs
+    :return: accuracy
+    """
+    return accuracy_score(ground_truth, pred_scores)
+
+
+def isfloat(num):
+    """
+    Check if a string contains a float.
+    :param num: string to be checked
+    :return: True if num is float, False otherwise
+    """
+    try:
+        float(num)
+        return True
+    except ValueError:
+        return False
+
+
 def check_metrics(metrics):
     """
     Check if the given list of metrics' names is correct.
@@ -69,13 +136,25 @@ def check_metrics(metrics):
     if isinstance(metrics, str):
         metrics = [metrics]
     assert all([isinstance(m, str) for m in metrics]), "The metrics must be represented as strings"
-    assert all(["@" in m for m in metrics]), "The @ is missing on some of the given metrics"
-    assert all([m.split("@")[0] in valid_metrics for m in metrics]), "Some of the given metrics are not valid." \
-                                                                     "The accepted metrics are " + str(valid_metrics)
-    assert all([m.split("@")[1].isdigit() for m in metrics]), "The k must be an integer"
+    # check all ranking based metrics
+    assert all([m.split("@")[0] in valid_metrics for m in metrics if "@" in m]), "One of the selected ranking-based" \
+                                                                                 " metrics is wrong."
+    # check the k of ranking-based metrics is an integer
+    assert all([m.split("@")[1].isdigit() for m in metrics if "@" in m]), "The k must be an integer"
+    # check all the other metrics
+    assert all([m in valid_metrics for m in metrics if "@" not in m if "-" not in m]), "Some of the given metrics are " \
+                                                                                       "not valid. The accepted " \
+                                                                                       "metrics are " + str(valid_metrics)
+    # check fbeta
+    assert all([m.split("-")[0] in valid_metrics for m in metrics if "-" in m]), "Some of the given metrics are " \
+                                                                                       "not valid. The accepted " \
+                                                                                       "metrics are " + str(valid_metrics)
+    assert all([isfloat(m.split("-")[1]) for m in metrics if "-" in m]), "Some of the given metrics are " \
+                                                                                 "not valid. The accepted " \
+                                                                                 "metrics are " + str(valid_metrics)
 
 
-def compute_metric(metric, pred_scores, ground_truth):
+def compute_metric(metric, pred_scores, ground_truth=None):
     """
     Compute the given metric on the given predictions and ground truth.
     :param metric: name of the metric that has to be computed
@@ -83,12 +162,23 @@ def compute_metric(metric, pred_scores, ground_truth):
     :param ground_truth: binary vector with relevance data (1 relevant, 0 not relevant)
     :return: the value of the given metric for the given predictions and relevance
     """
-    m, k = metric.split("@")
-    k = int(k)
-
-    if m == "ndcg":
-        return ndcg_at_k(pred_scores, ground_truth, k=k)
-    if m == "hit":
-        return hit_at_k(pred_scores, ground_truth, k=k)
+    if "@" in metric:
+        m, k = metric.split("@")
+        k = int(k)
+        if m == "ndcg":
+            return ndcg_at_k(pred_scores, ground_truth, k=k)
+        if m == "hit":
+            return hit_at_k(pred_scores, ground_truth, k=k)
+        if m == "recall":
+            return recall_at_k(pred_scores, ground_truth, k=k)
+    elif "-" in metric:
+        m, beta = metric.split("-")
+        beta = float(beta)
+        return fbeta(pred_scores, ground_truth, beta)
     else:
-        return recall_at_k(pred_scores, ground_truth, k=k)
+        if metric == "auc":
+            return auc(pred_scores)
+        if metric == "mse" or metric == "rmse":
+            return mse(pred_scores, ground_truth)
+        if metric == "acc":
+            return acc(pred_scores, ground_truth)

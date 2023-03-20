@@ -407,8 +407,41 @@ class DataManager:
         item_mapping_file = pd.DataFrame.from_records(item_mapping_records)
         item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
 
-    def get_mr_200k_genre_ratings(self, seed, binary_ratings=True, genre_threshold=None, k_filter=None,
-                                  genre_val_size=0.2, user_level_split=True):
+    def get_mr_200k_dataset(self, seed, binary_ratings=True, genre_threshold=None, k_filter_genre=None,
+                            k_filter_movie=None,
+                            genre_val_size=0.2, val_mode="auc", genre_user_level_split=False, movie_val_size=None,
+                            movie_test_size=None, movie_user_level_split=False, n_neg=None, true_neg_rank=False):
+        """
+        It returns the MindReader-200k dataset ready for learning. The dataset is subdivided as follows:
+        1. genre folds: a training set and validation set for learning the genre preferences of the users;
+        2. item folds: a training set of user-item pairs and a validation and test sets for computing AUC. In particular,
+        for each user, one random positive and negative interactions are randomly sampled for constructing validation
+        and test sets.
+
+        :param seed: seed for random reproducibility
+        :param binary_ratings: whether the ratings has to be binarized in [0,1]
+        :param genre_threshold: number of genres to be kept in the dataset. If None, all the genres are kept. If an
+        integer is given, only the `genre_threshold` most popular genres are kept.
+        :param k_filter_movie: threshold to filter underpopulated users and genres
+        :param genre_val_size: proportion of validation interactions for constructing the validation set of the genre
+        dataset
+        :param val_mode: str containing the validation mode. The validation mode could be 1 plus random, AUC, or
+        rating prediciton.
+        :param movie_val_size: proportion of validation interactions for constructing the validation set of the movie
+        dataset. Defaults to None. If None, it means the validation data has to be constructed for ranking prediction.
+        If it is different from None, it means the validation data has to be constructed for rating prediction.
+        :param genre_user_level_split: whether the split for user-genre ratings has to be performed at the user level
+        or not
+        :param movie_user_level_split: whether the split for user-item ratings has to be performed at the user level
+        or not
+        :param n_neg: number of negative items that have to be randomly sampled for each user to create the fold for
+        ranking computation. Defaults to None, meaning that the fold created is for AUC computation.
+        :param true_neg_rank: whether the negative items randomly sampled for each validation example for the ranking
+        task have to be sampled from the negative items of the user or from the non-relevant items. Defaults to False,
+        meaning that they are sampled from the non-relevant items (non interacted items).
+        :return: two datasets, one for learning genre preferences and one for learning movie preferences
+        """
+        assert val_mode in ["1+random", "auc", "rating-prediction"], "The selected validation mode is not available"
         # get MindReader entities
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader-200k/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
@@ -416,47 +449,79 @@ class DataManager:
         mr_genres = [entity["uri"] for entity in mr_entities_dict if "Genre" in entity["labels"]]
         # get MindReader ratings
         mr_ratings = pd.read_csv(os.path.join(self.data_path, "mindreader-200k/ratings.csv"))
+        # remove useless columns from dataframe
+        mr_ratings = mr_ratings.drop(mr_ratings.columns[[0, 3]], axis=1).reset_index(drop=True)
         # get ratings on movie genres and remove unknown ratings
         genre_ratings = mr_ratings[mr_ratings["uri"].isin(mr_genres) & mr_ratings["sentiment"] != 0]
-        # remove useless columns
-        genre_ratings = genre_ratings.drop(genre_ratings.columns[[0, 3]], axis=1).reset_index(drop=True)
         # get ratings only for the most rated genres, if requested
         if genre_threshold is not None:
             # get the top `genre_threshold` most rated genres
             most_rated_genres = list(genre_ratings.groupby(["uri"]).size().reset_index(
                 name='counts').sort_values(by=["counts"], ascending=False).head(genre_threshold)["uri"])
-            # the ratings only for the most rated genres
+            # get ratings only for the most rated genres
             genre_ratings = genre_ratings[genre_ratings["uri"].isin(most_rated_genres)]
-        # filter genres rated by less than `k_filter` users and users who rated less than 5 genres to make movie genre
-        # ratings less sparse
-        if k_filter is not None:
-            tmp1 = genre_ratings.groupby(['userId'], as_index=False)['uri'].count()
-            tmp1.rename(columns={'uri': 'cnt_item'}, inplace=True)
-            tmp2 = genre_ratings.groupby(['uri'], as_index=False)['userId'].count()
-            tmp2.rename(columns={'userId': 'cnt_user'}, inplace=True)
-            genre_ratings = genre_ratings.merge(tmp1, on=['userId']).merge(tmp2, on=['uri'])
-            genre_ratings = genre_ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}')
-            genre_ratings = genre_ratings.drop(['cnt_item', 'cnt_user'], axis=1)
-            del tmp1, tmp2
-        # get integer user and genre indexes
+
+        def filter_ratings(ratings, k_filter):
+            if k_filter is not None:
+                tmp1 = ratings.groupby(['userId'], as_index=False)['uri'].count()
+                tmp1.rename(columns={'uri': 'cnt_item'}, inplace=True)
+                tmp2 = ratings.groupby(['uri'], as_index=False)['userId'].count()
+                tmp2.rename(columns={'userId': 'cnt_user'}, inplace=True)
+                ratings = ratings.merge(tmp1, on=['userId']).merge(tmp2, on=['uri'])
+                ratings = ratings.query(f'cnt_item >= {k_filter} and cnt_user >= {k_filter}')
+                ratings = ratings.drop(['cnt_item', 'cnt_user'], axis=1)
+                del tmp1, tmp2
+            return ratings
+
+        # filter genres rated by less than `k_filter_genre` users and users who rated less than 5 genres to make
+        # movie genre ratings less sparse
+        genre_ratings = filter_ratings(genre_ratings, k_filter_genre)
+
+        # get movie ratings and remove unknown ratings
+        mr_movies = [entity["uri"] for entity in mr_entities_dict if "Movie" in entity["labels"]]
+        movie_ratings = mr_ratings[mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0]
+        # filter users who rated less than `k_filter_movie` movies and movies with less than `k_filter_movie` ratings
+        movie_ratings = filter_ratings(movie_ratings, k_filter_movie)
+        # get ids of users who rated at least 'k_filter' genre
+        u_who_rated_genres = genre_ratings["userId"].unique()
+        # get ids of users who rated at least 'k_filter' movies
+        u_who_rated_movies = movie_ratings["userId"].unique()
+        # get intersection of previous users to get the set of users of the dataset - we want the same exact set of
+        # users on both datasets (the genre one and the movie one) since we need to perform transfer learning and
+        # knowledge transfer
+        u_who_rated = set(u_who_rated_movies) & set(u_who_rated_genres)
+        # remove all movie ratings of users who did not rate at least 'k_filter' genres
+        movie_ratings = movie_ratings[movie_ratings["userId"].isin(u_who_rated)]
+        # remove all genre ratings of user who did not rate at least 'k_filter' movies
+        genre_ratings = genre_ratings[genre_ratings["userId"].isin(u_who_rated)]
+        # get integer user, genre, and item indexes
         u_ids = genre_ratings["userId"].unique()
         int_u_ids = list(range(len(u_ids)))
         user_string_to_id = dict(zip(u_ids, int_u_ids))
         g_ids = genre_ratings["uri"].unique()
         int_g_ids = list(range(len(g_ids)))
         g_string_to_id = dict(zip(g_ids, int_g_ids))
+        i_ids = movie_ratings["uri"].unique()
+        int_i_ids = list(range(len(i_ids)))
+        i_string_to_id = dict(zip(i_ids, int_i_ids))
         genre_ratings = genre_ratings.replace(user_string_to_id).replace(g_string_to_id).reset_index(drop=True)
+        movie_ratings = movie_ratings.replace(user_string_to_id).replace(i_string_to_id).reset_index(drop=True)
 
         # convert negative ratings from -1 to 0
         if binary_ratings:
             genre_ratings = genre_ratings.replace(-1, 0)
+            movie_ratings = movie_ratings.replace(-1, 0)
 
-        # get number of users and genres
+        # get number of users and genres and movies
         n_users = genre_ratings["userId"].nunique()
         n_genres = genre_ratings["uri"].nunique()
+        n_items = movie_ratings["uri"].nunique()
 
-        # random sample `genre_val_size` interactions for each user to create validation set
-        def train_test_split(ratings, frac=None, user_level=True):
+        # compute user-item sparse matrix
+        u_i_matrix = csr_matrix((np.ones(len(movie_ratings)), (movie_ratings["userId"], movie_ratings["uri"])),
+                                shape=(n_users, n_items))
+
+        def train_test_split(ratings, frac=None, user_level=False):
             """
             It splits the dataset into training and test sets.
 
@@ -465,16 +530,15 @@ class DataManager:
             rating (LOO)
             :param user_level: whether the train test split has to be performed at the user level or ratings can
             be sampled randomly independently from the user. Defaults to True, meaning that the split is done at the
-            user level
-            :return: train and test set dataframes containing the positive user-item interactions randomly sampled
-            by the procedure
+            user level. In case the split is not at the user level, a stratified split is performed.
+            :return: train and test set dataframes
             """
             if user_level:
                 test_ids = ratings.groupby(by=["userId"]).apply(
                     lambda x: x.sample(frac=frac, random_state=seed).index
                 ).explode().values
-                # remove NaN indexes - when pandas is not able to sample due to small group size and high frac, it returns
-                # an empty index which then becomes NaN when converted in numpy
+                # remove NaN indexes - when pandas is not able to sample due to small group size and high frac,
+                # it returns an empty index which then becomes NaN when converted in numpy
                 test_ids = test_ids[~np.isnan(test_ids.astype("float64"))]
                 train_ids = np.setdiff1d(ratings.index.values, test_ids)
                 train_set = ratings.iloc[train_ids].reset_index(drop=True)
@@ -482,11 +546,102 @@ class DataManager:
                 return train_set, test_set
             else:
                 # we use scikit-learn train-test split
-                # test_ids = ratings.sample(frac=frac, random_state=seed).index
                 return train_test_split_sklearn(ratings, random_state=seed, stratify=ratings["sentiment"],
                                                 test_size=frac)
 
-        train_set, val_set = train_test_split(genre_ratings, frac=genre_val_size, user_level=user_level_split)
+        def create_folds_for_auc_computation(item_ratings):
+            """
+            It randomly samples one positive and one negative rating for each user. These are used as validation
+            ratings to compute AUC metric.
+
+            :param item_ratings: dataset of ratings from which the interactions have to be sampled for creating the
+            validation or test set
+            :return: a dataframe containing the remaining ratings (training set) and a np array of
+            (user, pos_item, neg_item) triples for computing AUC
+            """
+            # todo questa funzione e' un piccolo collo di bottiglia
+            # group by userId
+            users = item_ratings.groupby(by=["userId"])
+            auc_triples = []
+            for user, user_ratings in users:
+                # check if the user has at least one positive rating and one negative rating
+                pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
+                neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
+                if len(pos_ratings) > 1 and len(neg_ratings) > 1:
+                    # sample one positive and one negative rating for this user
+                    pos_int = pos_ratings.sample(random_state=seed)
+                    neg_int = neg_ratings.sample(random_state=seed)
+                    auc_triples.append([[user, int(neg_int["uri"])], [user, int(pos_int["uri"])]])
+                    # drop positive and negative interactions from original dataframe
+                    item_ratings.drop(pos_int.index, inplace=True)
+                    item_ratings.drop(neg_int.index, inplace=True)
+            return item_ratings, np.array(auc_triples)
+
+        def create_fold_for_ranking_computation(item_ratings):
+            """
+            It takes the given dataframe of ratings as input and creates the validation/test fold for ranking
+            computation.
+
+            For each user, one random positive item is held-out for validation/test set, then `n_neg` random
+            non-relevant items are sampled from the set of items that the user did not see.
+
+            :param item_ratings: dataframe containing the ratings from which the validation fold has to be created
+            :return: dataframe containing the training ratings and a np.array containing the validation/test fold.
+            For each user, the positive item is put at the end of the item list.
+            """
+            # group by userId
+            users = item_ratings.groupby(by=["userId"])
+            val_fold = []
+            for user, user_ratings in users:
+                # check if the user has at least one positive rating
+                pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
+                if len(pos_ratings) > 1:
+                    # sample one positive rating
+                    pos_int = pos_ratings.sample(random_state=seed)
+                    if true_neg_rank:
+                        # take the negative ratings of the user
+                        neg_ratings = user_ratings[user_ratings["sentiment"] != 1]["uri"]
+                        # check if there are enough negative ratings and that the number of sampled ratings is less than
+                        # 40% of the total number of negative ratings of the user
+                        if len(neg_ratings) > n_neg and (n_neg / len(neg_ratings)) <= 0.4:
+                            random_negs = neg_ratings.sample(n=n_neg, random_state=seed)
+                            # remove the sampled ratings from the original dataframe
+                            item_ratings.drop(random_negs.index, inplace=True)
+                            random_negs = list(random_negs)
+                        else:
+                            # we pass to the next user if we do not have enough neg ratings to sample for this user
+                            continue
+                    else:
+                        # sample n_neg non-relevant items for this user
+                        neg_ints = list(set(range(n_items)) - set(u_i_matrix[user].nonzero()[1]))
+                        random_negs = random.sample(neg_ints, n_neg)
+                    # create validation example for the current user
+                    val_fold.append([[user, neg] for neg in random_negs] + [[user, int(pos_int["uri"])]])
+                    # drop positive interactions from original dataframe
+                    item_ratings.drop(pos_int.index, inplace=True)
+            return item_ratings, np.array(val_fold)
+
+        # create train and validation set for genre preferences
+        g_train_set, g_val_set = train_test_split(genre_ratings, frac=genre_val_size, user_level=genre_user_level_split)
+        # create train, validation and test set for movie preferences according to the selected task
+        val_examples, test_examples = None, None
+        if val_mode == "rating-prediction":
+            assert movie_val_size is not None and movie_test_size is not None, "You selected rating " \
+                                                                               "prediction as validation mode, so you" \
+                                                                               "must specify the proportion of ratings" \
+                                                                               "to be put in validation and test sets."
+            train_set, test_set = train_test_split(movie_ratings, frac=movie_test_size,
+                                                   user_level=movie_user_level_split)
+            train_set_small, val_set = train_test_split(train_set, frac=movie_test_size,
+                                                        user_level=movie_user_level_split)
+        elif val_mode == "1+random":
+            assert n_neg is not None, "You selected one plus random as validation mode, so you must specify parameter" \
+                                      "n_neg, which indicates the number of negative items for each validation example."
+            train_set, test_examples = create_fold_for_ranking_computation(movie_ratings)
+            train_set_small, val_examples = create_fold_for_ranking_computation(train_set)
+        elif val_mode == "auc":
+            train_set, test_examples = create_folds_for_auc_computation(movie_ratings)
+            train_set_small, val_examples = create_folds_for_auc_computation(train_set)
 
         # create numpy arrays of user-item ratings with interaction matrices
         def create_fold(fold, n_items):
@@ -497,10 +652,11 @@ class DataManager:
             :param n_items: number of items in the dataset, used to create the user-item sparse matrix. It has to be
             passed because depending on the fold, n_items can be the number of movies or the number of genres.
             :return: a dictionary. The first key (ratings) is a numpy array containing user-item-rating triples, the
-            second one (matrix) is a
-            csr sparse matrix containing the same user-item interactions. A 1 in the matrix means that the user
+            second one (interaction_matrix) is a
+            csr sparse matrix containing the user-item interactions. A 1 in the matrix means that the user
             interacted with the item (it gave a positive or negative rating). A 0 means that is is an unobserved item
-            for the user.
+            for the user. The third key is the rating matrix. Same shape of the interaction matrix but filled with
+            ground truth.
             """
             return {"ratings": np.array([tuple(rating.values()) for rating in fold.to_dict("records")]),
                     "interaction_matrix": csr_matrix((np.ones(len(fold)), (list(fold["userId"]), list(fold["uri"]))),
@@ -508,10 +664,33 @@ class DataManager:
                     "rating_matrix": csr_matrix((np.array([rating["sentiment"] for rating in fold.to_dict("records")]),
                                                  (list(fold["userId"]), list(fold["uri"]))), shape=(n_users, n_items))}
 
-        genre_folds = {"train_set": create_fold(train_set, n_genres),
-                       "val_set": create_fold(val_set, n_genres)}
+        genre_folds = {"train_set": create_fold(g_train_set, n_genres),
+                       "val_set": create_fold(g_val_set, n_genres)}
 
-        return n_users, n_genres, genre_folds, {"user": user_string_to_id, "genre": g_string_to_id}
+        movie_folds = {"entire_dataset": csr_matrix((np.ones(len(movie_ratings)),
+                                                     (list(movie_ratings["userId"]), list(movie_ratings["uri"]))),
+                                                    shape=(n_users, n_items)),
+                       "train_set": create_fold(train_set, n_items),
+                       "train_set_small": create_fold(train_set_small, n_items),
+                       "val_set": val_examples if val_examples is not None else create_fold(val_set, n_items),
+                       "test_set": test_examples if test_examples is not None else create_fold(test_set, n_items)}
+
+        # create itemXgenres matrix
+        # get MindReader triples file
+        mr_triples = pd.read_csv("./datasets/mindreader-200k/triples.csv")
+        # get only triples with HAS_GENRE relationship, where the head is a movie and the tail a movie genre
+        mr_genre_triples = mr_triples[mr_triples["head_uri"].isin(i_string_to_id.keys()) &
+                                      mr_triples["tail_uri"].isin(g_string_to_id.keys()) &
+                                      (mr_triples["relation"] == "HAS_GENRE")]
+        # replace URIs with integer indexes
+        mr_genre_triples = mr_genre_triples.replace(i_string_to_id).replace(g_string_to_id)
+        # construct the itemXgenres matrix
+        # todo alcuni film non hanno generi associati e c'e' un genere che non e' associato ad alcun film
+        item_genres_matrix = csr_matrix((np.ones(len(mr_genre_triples)),
+                                         (list(mr_genre_triples["head_uri"]),
+                                          list(mr_genre_triples["tail_uri"]))), shape=(n_items, n_genres))
+
+        return n_users, n_genres, n_items, genre_folds, movie_folds, item_genres_matrix
 
     def get_mr_100k_genre_ratings(self):
         # get MindReader-100k entities
@@ -590,7 +769,7 @@ class DataManager:
         movie_ratings = mr_ratings[mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0]
         if binary_ratings:
             movie_ratings = movie_ratings.replace(-1, 0)
-        # get users who rated at least five genres
+        # get users who rated at least 5 genres
         users_rated_k_genres = genre_ratings["userId"].unique()
         # remove all the other users from the movie ratings
         movie_ratings = movie_ratings[movie_ratings["userId"].isin(users_rated_k_genres)]
