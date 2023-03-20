@@ -410,7 +410,8 @@ class DataManager:
     def get_mr_200k_dataset(self, seed, binary_ratings=True, genre_threshold=None, k_filter_genre=None,
                             k_filter_movie=None,
                             genre_val_size=0.2, val_mode="auc", genre_user_level_split=False, movie_val_size=None,
-                            movie_test_size=None, movie_user_level_split=False, n_neg=None, true_neg_rank=False):
+                            movie_test_size=None, movie_user_level_split=False, n_neg=None, true_neg_rank=False,
+                            implicit_feedback=False):
         """
         It returns the MindReader-200k dataset ready for learning. The dataset is subdivided as follows:
         1. genre folds: a training set and validation set for learning the genre preferences of the users;
@@ -439,9 +440,15 @@ class DataManager:
         :param true_neg_rank: whether the negative items randomly sampled for each validation example for the ranking
         task have to be sampled from the negative items of the user or from the non-relevant items. Defaults to False,
         meaning that they are sampled from the non-relevant items (non interacted items).
+        :param implicit_feedback: whether the dataset has to be converted to implicit feedback or not. In the case it
+        is converted, only the positive ratings are kept. Defaults to False, meaning the dataset is left explicit. This
+        conversion is applied only to movie ratings.
         :return: two datasets, one for learning genre preferences and one for learning movie preferences
         """
         assert val_mode in ["1+random", "auc", "rating-prediction"], "The selected validation mode is not available"
+        assert (implicit_feedback and val_mode != "rating-prediction") or \
+               (val_mode == "rating-prediction" and not implicit_feedback), "You cannot select implicit feedback" \
+                                                                            "and rating prediction as validation mode."
         # get MindReader entities
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader-200k/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
@@ -482,6 +489,10 @@ class DataManager:
         movie_ratings = mr_ratings[mr_ratings["uri"].isin(mr_movies) & mr_ratings["sentiment"] != 0]
         # filter users who rated less than `k_filter_movie` movies and movies with less than `k_filter_movie` ratings
         movie_ratings = filter_ratings(movie_ratings, k_filter_movie)
+        if implicit_feedback:
+            # remove negative ratings in such a way they are treated as non-relevant items together
+            # with the non-interacted items
+            movie_ratings = movie_ratings[movie_ratings["sentiment"] == 1]
         # get ids of users who rated at least 'k_filter' genre
         u_who_rated_genres = genre_ratings["userId"].unique()
         # get ids of users who rated at least 'k_filter' movies
@@ -508,7 +519,7 @@ class DataManager:
         movie_ratings = movie_ratings.replace(user_string_to_id).replace(i_string_to_id).reset_index(drop=True)
 
         # convert negative ratings from -1 to 0
-        if binary_ratings:
+        if binary_ratings and not implicit_feedback:
             genre_ratings = genre_ratings.replace(-1, 0)
             movie_ratings = movie_ratings.replace(-1, 0)
 
@@ -566,15 +577,26 @@ class DataManager:
             for user, user_ratings in users:
                 # check if the user has at least one positive rating and one negative rating
                 pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
-                neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
-                if len(pos_ratings) > 1 and len(neg_ratings) > 1:
-                    # sample one positive and one negative rating for this user
-                    pos_int = pos_ratings.sample(random_state=seed)
-                    neg_int = neg_ratings.sample(random_state=seed)
-                    auc_triples.append([[user, int(neg_int["uri"])], [user, int(pos_int["uri"])]])
-                    # drop positive and negative interactions from original dataframe
-                    item_ratings.drop(pos_int.index, inplace=True)
-                    item_ratings.drop(neg_int.index, inplace=True)
+                if not implicit_feedback:
+                    neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
+                    if len(pos_ratings) > 1 and len(neg_ratings) > 1:
+                        # sample one positive and one negative rating for this user
+                        pos_int = pos_ratings.sample(random_state=seed)
+                        neg_int = neg_ratings.sample(random_state=seed)
+                        auc_triples.append([[user, int(neg_int["uri"])], [user, int(pos_int["uri"])]])
+                        # drop positive and negative interactions from original dataframe
+                        item_ratings.drop(pos_int.index, inplace=True)
+                        item_ratings.drop(neg_int.index, inplace=True)
+                else:
+                    if len(pos_ratings) > 1:
+                        # sample one positive rating for this user
+                        pos_int = pos_ratings.sample(random_state=seed)
+                        # sample one non-relevant item for this user
+                        neg_int = random.choice(list(set(range(n_items)) - set(u_i_matrix[user].nonzero()[1])))
+                        # create AUC validation example for the current user
+                        auc_triples.append([[user, neg_int], [user, int(pos_int["uri"])]])
+                        # drop positive interaction from original dataframe
+                        item_ratings.drop(pos_int.index, inplace=True)
             return item_ratings, np.array(auc_triples)
 
         def create_fold_for_ranking_computation(item_ratings):
@@ -667,9 +689,7 @@ class DataManager:
         genre_folds = {"train_set": create_fold(g_train_set, n_genres),
                        "val_set": create_fold(g_val_set, n_genres)}
 
-        movie_folds = {"entire_dataset": csr_matrix((np.ones(len(movie_ratings)),
-                                                     (list(movie_ratings["userId"]), list(movie_ratings["uri"]))),
-                                                    shape=(n_users, n_items)),
+        movie_folds = {"entire_dataset": u_i_matrix,
                        "train_set": create_fold(train_set, n_items),
                        "train_set_small": create_fold(train_set_small, n_items),
                        "val_set": val_examples if val_examples is not None else create_fold(val_set, n_items),

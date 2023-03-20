@@ -267,9 +267,64 @@ class TrainingDataLoader:
             yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
 
 
-class TrainingDataLoaderBPR:
+class TrainingDataLoaderImplicit:
     """
-    Data loader designed to provide batches for learning a MF model with Bayesian Personalized Ranking.
+    Same loader as the previous one, but designed to work with implicit feedback. The data passed to the loader is just
+    positive feedback. We need to sample a non-relevant item for each positive interaction. In this way, we provide the
+    model with negative feedback as well.
+    """
+
+    def __init__(self,
+                 data,
+                 u_i_matrix,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param u_i_matrix: sparse user-item matrix, used to sample the negative ratings (we do not want to sample some
+        positive ratings at random)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.data = np.array(data)
+        self.u_i_matrix = u_i_matrix
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            data = self.data[idxlist[start_idx:end_idx]]
+            negative_ints = []
+            # here, we need to sample a non-relevant interaction for each positive interaction in the batch
+            for user, _, _ in data:
+                negative_ints.append([user, random.choice(list(set(range(self.u_i_matrix.shape[0])) -
+                                                          set(self.u_i_matrix[user].nonzero()[1]))), 0])
+            # convert negative interactions to numpy
+            negative_ints = np.array(negative_ints)
+            # add negative interactions to batch data
+            data = np.concatenate([data, negative_ints], axis=0)
+            u_i_pairs = data[:, :2]
+            ratings = data[:, -1]
+
+            yield torch.tensor(u_i_pairs), torch.tensor(ratings).float()
+
+
+class TrainingDataLoaderBPRCustom:
+    """
+    Data loader designed to provide batches for learning a MF model with Bayesian Personalized Ranking. It is custom in
+    the sense that it is designed to work with explicit feedback. The prepare_data method prepares the dataset for
+    learning a model with BPR using both positive and negative interactions. For each user, for each positive
+    interaction, this loaders matches the positive interaction with all the negative interactions of the user.
     """
 
     def __init__(self,
@@ -330,6 +385,52 @@ class TrainingDataLoaderBPR:
         for _, start_idx in enumerate(range(0, n, self.batch_size)):
             end_idx = min(start_idx + self.batch_size, n)
             yield torch.tensor(self.data[idxlist[start_idx:end_idx]])
+
+
+class TrainingDataLoaderBPRClassic:
+    """
+    Data loader designed to provide batches for learning a MF model with Bayesian Personalized Ranking. This is the
+    classic loader for learning a model using BPR. For each positive user-item interaction, one negative interaction
+    is sampled from the set of non-relevant items for the user.
+    """
+
+    def __init__(self,
+                 data,
+                 u_i_matrix,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param u_i_matrix: sparse user-item interaction matrix with 1 if user has interacted the item and 0 otherwise.
+        It is used internally to sample non-relevant items for the training user that do not have negative items.
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.u_i_matrix = u_i_matrix
+        # remove the rating column because it is not useful for this loader
+        self.data = data[:, 0:2]
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            positive_int = self.data[idxlist[start_idx:end_idx]]
+            negative_int = []
+            for user, _ in positive_int:
+                negative_int.append([user, random.choice(list(set(range(self.u_i_matrix.shape[1])) -
+                                                              set(self.u_i_matrix[user].nonzero()[1])))])
+            negative_int = np.array(negative_int)
+            yield torch.tensor(np.stack([positive_int, negative_int], axis=1))
 
 
 class BalancedTrainingDataLoader:
