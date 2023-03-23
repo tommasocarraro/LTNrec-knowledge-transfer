@@ -1,5 +1,4 @@
 import random
-
 import numpy as np
 import torch
 import ltn
@@ -80,10 +79,130 @@ class TrainingDataLoaderLTNClassification:
             pos_ex = data[data[:, -1] == 1]
             neg_ex = data[data[:, -1] != 1]
 
-            yield (ltn.Variable('users_pos', torch.tensor(pos_ex[:, 0]), add_batch_dim=False),
-                   ltn.Variable('items_pos', torch.tensor(pos_ex[:, 1]), add_batch_dim=False)), \
-                  (ltn.Variable('users_neg', torch.tensor(neg_ex[:, 0]), add_batch_dim=False),
-                   ltn.Variable('items_neg', torch.tensor(neg_ex[:, 1]), add_batch_dim=False))
+            if len(pos_ex) and len(neg_ex):
+                yield ltn.Variable('users_pos', torch.tensor(pos_ex[:, 0]), add_batch_dim=False), \
+                      ltn.Variable('items_pos', torch.tensor(pos_ex[:, 1]), add_batch_dim=False),\
+                      ltn.Variable('users_neg', torch.tensor(neg_ex[:, 0]), add_batch_dim=False),\
+                      ltn.Variable('items_neg', torch.tensor(neg_ex[:, 1]), add_batch_dim=False)
+            elif len(pos_ex):
+                yield ltn.Variable('users_pos', torch.tensor(pos_ex[:, 0]), add_batch_dim=False), \
+                      ltn.Variable('items_pos', torch.tensor(pos_ex[:, 1]), add_batch_dim=False), None, None
+            else:
+                yield None, None, ltn.Variable('users_neg', torch.tensor(neg_ex[:, 0]), add_batch_dim=False),\
+                      ltn.Variable('items_neg', torch.tensor(neg_ex[:, 1]), add_batch_dim=False)
+
+
+class TrainingDataLoaderLTNClassificationSampling:
+    """
+    Data loader to load the training set of the dataset. It creates batches and wrap them inside LTN
+    variables ready for the learning.
+    """
+
+    def __init__(self,
+                 data,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        data = np.array(data)
+        self.pos_data = data[data[:, -1] == 1]
+        self.neg_data = data[data[:, -1] != 1]
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def __len__(self):
+        return int(np.ceil(self.pos_data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.pos_data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            pos_data = self.pos_data[idxlist[start_idx:end_idx]]
+            # sample some negative data in such a way positive and negative examples are balanced
+            neg_idx = random.sample(range(len(self.neg_data)), len(pos_data))
+            neg_data = self.neg_data[neg_idx]
+
+            yield ltn.Variable('users_pos', torch.tensor(pos_data[:, 0]), add_batch_dim=False), \
+                  ltn.Variable('items_pos', torch.tensor(pos_data[:, 1]), add_batch_dim=False), \
+                  ltn.Variable('users_neg', torch.tensor(neg_data[:, 0]), add_batch_dim=False), \
+                  ltn.Variable('items_neg', torch.tensor(neg_data[:, 1]), add_batch_dim=False)
+
+
+class TrainingDataLoaderLTNBPR:
+    """
+    Data loader designed to provide batches for learning a MF model with Bayesian Personalized Ranking. It is custom in
+    the sense that it is designed to work with explicit feedback. The prepare_data method prepares the dataset for
+    learning a model with BPR using both positive and negative interactions. For each user, for each positive
+    interaction, this loaders matches the positive interaction with all the negative interactions of the user.
+    """
+
+    def __init__(self,
+                 data,
+                 u_i_matrix,
+                 batch_size=1,
+                 shuffle=True):
+        """
+        Constructor of the training data loader.
+        :param data: list of triples (user, item, rating)
+        :param u_i_matrix: sparse user-item interaction matrix with 1 if user has interacted the item and 0 otherwise.
+        It is used internally to sample non-relevant items for the training user that do not have negative items.
+        :param batch_size: batch size for the training of the model
+        :param shuffle: whether to shuffle data during training or not
+        """
+        self.u_i_matrix = u_i_matrix
+        self.data = self.prepare_data(data)
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+
+    def prepare_data(self, data):
+        data = pd.DataFrame(data, columns=['userId', 'uri', 'sentiment'])
+        training_triples = []
+        users = data.groupby(["userId"])
+        for user, user_ratings in users:
+            pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
+            neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
+            # check that at least one example can be constructed for the current user
+            if len(pos_ratings) >= 1 and len(neg_ratings) >= 1:
+                training_triples.extend([[user, pos, neg] for pos, neg in list(itertools.product(pos_ratings["uri"],
+                                                                                                 neg_ratings["uri"]))])
+            else:
+                # here, we sample one non-relevant item for each positive interaction of the user since we do not have
+                # negative items for the current user
+                # the probability of sampling a negative item is really high due to the high sparsity
+                # very often, we can assume that non-relevant items are negative items
+                # the problem is that they remain the same for all epochs, so there could be a bias on the selected
+                # items. Performing experiments with more seeds is imperative in this case
+                # todo there is a user for which we do not have examples because he has only negative examples in the
+                #  training set. The validation on this user will be very challening but it is just a user
+                if len(pos_ratings) >= 1 and len(neg_ratings) == 0:
+                    training_triples.extend([[user, pos, random.choice(list(set(range(self.u_i_matrix.shape[1])) -
+                                             set(self.u_i_matrix[user].nonzero()[1])))]
+                                             for pos in list(pos_ratings["uri"])])
+        return np.array(training_triples)
+
+    def __len__(self):
+        return int(np.ceil(self.data.shape[0] / self.batch_size))
+
+    def __iter__(self):
+        n = self.data.shape[0]
+        idxlist = list(range(n))
+        if self.shuffle:
+            np.random.shuffle(idxlist)
+
+        for _, start_idx in enumerate(range(0, n, self.batch_size)):
+            end_idx = min(start_idx + self.batch_size, n)
+            triples = self.data[idxlist[start_idx:end_idx]]
+            yield ltn.Variable('users', torch.tensor(triples[:, 0]), add_batch_dim=False), \
+                  ltn.Variable('items_pos', torch.tensor(triples[:, 1]), add_batch_dim=False), \
+                  ltn.Variable('items_neg', torch.tensor(triples[:, 2]), add_batch_dim=False)
 
 
 class TrainingDataLoaderLTNGenres:

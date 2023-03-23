@@ -446,9 +446,8 @@ class DataManager:
         :return: two datasets, one for learning genre preferences and one for learning movie preferences
         """
         assert val_mode in ["1+random", "auc", "rating-prediction"], "The selected validation mode is not available"
-        assert (implicit_feedback and val_mode != "rating-prediction") or \
-               (val_mode == "rating-prediction" and not implicit_feedback), "You cannot select implicit feedback" \
-                                                                            "and rating prediction as validation mode."
+        if implicit_feedback and val_mode == "rating-prediction":
+            raise ValueError("You cannot select implicit feedback and rating prediction as validation mode.")
         # get MindReader entities
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader-200k/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")

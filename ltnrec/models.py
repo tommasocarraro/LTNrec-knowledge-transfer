@@ -55,6 +55,8 @@ class MatrixFactorization(torch.nn.Module):
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
         torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
         torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
+        # torch.nn.init.xavier_normal_(self.u_emb.weight)
+        # torch.nn.init.xavier_normal_(self.i_emb.weight)
         self.biased = biased
         if biased:
             self.u_bias = torch.nn.Embedding(n_users, 1)
@@ -207,6 +209,8 @@ class Trainer:
                 if model_name is not None:
                     # add model name to log information if model name is available
                     log_record = ("%s: " % (model_name,)) + log_record
+                # add log_dict to log_record
+                log_record += " - " + " - ".join(["%s %.3f" % (k, v) for k, v in log_dict.items() if k != "train_loss"])
                 # print epoch report
                 print(log_record)
                 if self.wandb_train:
@@ -240,14 +244,17 @@ class Trainer:
         """
         raise NotImplementedError()
 
-    def predict(self, x, *args, **kwargs):
+    def predict(self, x, dim=1, **kwargs):
         """
         Method for performing a prediction of the model.
-        :param x: input for which the prediction has to be performed
-        :param args: these are the potential additional parameters useful to the model for performing the prediction
-        :param kwargs: these are the potential additional parameters useful to the model for performing the prediction
-        :return: prediction of the model for the given input
+        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
+        is the user index, while the second position is the item index
+        :param dim: dimension across which the dot product of the MF has to be computed
+        :return: the prediction of the model for the given user-item pair
         """
+        u_idx, i_idx = x[:, 0], x[:, 1]
+        with torch.no_grad():
+            return self.model(u_idx, i_idx, dim)
 
     def validate(self, val_loader, val_metric):
         """
@@ -267,7 +274,7 @@ class Trainer:
             val_score = np.mean(np.concatenate(val_score))
         else:
             assert isinstance(val_loader, ValDataLoaderRatings), "You selected a regression or classification metric" \
-                                                                  "as validation metric but you are not using the " \
+                                                                  " as validation metric but you are not using the " \
                                                                   "ValDataLoaderRatings."
             for batch_idx, (X, y) in enumerate(val_loader):
                 if "fbeta" not in val_metric and val_metric != "acc":
@@ -408,6 +415,7 @@ class MFTrainerBPR(Trainer):
         super(MFTrainerBPR, self).__init__(mf_model, optimizer, wandb_train)
         self.act_func = torch.nn.LogSigmoid()
         self.loss = lambda pos, neg: -torch.sum(self.act_func(pos - neg))
+        # self.loss = torch.nn.MarginRankingLoss(margin=2.0, reduction="sum")
 
     def train_epoch(self, train_loader):
         train_loss = 0.0
@@ -421,18 +429,6 @@ class MFTrainerBPR(Trainer):
             loss.backward()
             self.optimizer.step()
         return train_loss / len(train_loader), {"train_loss": train_loss / len(train_loader)}
-
-    def predict(self, x, dim=1, **kwargs):
-        """
-        Method for performing a prediction of the model.
-        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
-        is the user index, while the second position is the item index
-        :param dim: dimension across which the dot product of the MF has to be computed
-        :return: the prediction of the model for the given user-item pair
-        """
-        u_idx, i_idx = x[:, 0], x[:, 1]
-        with torch.no_grad():
-            return self.model(u_idx, i_idx, dim)
 
 
 class MFTrainerRegression(MFTrainer):
@@ -451,18 +447,6 @@ class MFTrainerRegression(MFTrainer):
         :param wandb_train: whether the data has to be logged to WandB or not
         """
         super(MFTrainerRegression, self).__init__(mf_model, optimizer, loss, wandb_train)
-
-    def predict(self, x, dim=1, **kwargs):
-        """
-        Method for performing a prediction of the model.
-        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
-        is the user index, while the second position is the item index
-        :param dim: dimension across which the dot product of the MF has to be computed
-        :return: the prediction of the model for the given user-item pair
-        """
-        u_idx, i_idx = x[:, 0], x[:, 1]
-        with torch.no_grad():
-            return self.model(u_idx, i_idx, dim)
 
 
 class MFTrainerClassifier(MFTrainer):
@@ -508,9 +492,7 @@ class MFTrainerClassifier(MFTrainer):
             return preds
 
 
-class LTNTrainerMF(MFTrainer):
-    # todo qui semplicemente posso estendere uno degli ultimi due fatti e sovrascrivere il metodo train_epoch con le
-    #  cose che servono a me
+class LTNTrainerMFRegression(MFTrainer):
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function.
     The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
@@ -521,33 +503,80 @@ class LTNTrainerMF(MFTrainer):
     higher the closeness between the predicted score and the ground truth.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, scheduler=None):
+    def __init__(self, mf_model, optimizer, alpha, exp, p, wandb_train=False):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
-        :param alpha: coefficient of smooth equality predicate
+        :param alpha: coefficient for smoothing equality predicate
+        :param gamma: exponent used in the equality predicate to give more weight to larger error, if needed
+        :param p: hyper-parameter p of universal quantifier aggregator
+        :param wandb_train: whether the information about the training of the model has to be logged on WandB or not
         """
-        super(LTNTrainerMF, self).__init__(mf_model, optimizer)
-        self.Likes = ltn.Function(self.model)
-        self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
+        super(LTNTrainerMFRegression, self).__init__(mf_model, optimizer, wandb_train)
+        self.Score = ltn.Function(self.model)
+        self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.pow(torch.abs(pred - gt), exp)))
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
-        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(), quantifier='f')
-        self.sat_agg = ltn.fuzzy_ops.SatAgg()
-        self.scheduler = scheduler
+        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
+        self.Forall_mean = ltn.Quantifier(ltn.fuzzy_ops.AggregMean(), quantifier='f')
 
     def train_epoch(self, train_loader):
         train_loss, train_sat_agg = 0.0, 0.0
         for batch_idx, (u, i, r) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            train_sat = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r)).value
+            train_sat = self.Forall(ltn.diag(u, i, r), self.Sim(self.Score(u, i), r)).value
             train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-        if self.scheduler is not None:
-            self.scheduler.step()
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
+
+
+class LTNTrainerMFBPR(MFTrainer):
+    """
+    Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function.
+    The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
+    should be near 1 if the user likes the item, and near 0 if the user dislikes the item.
+    The closeness between the predictions of the Likes function and the ground truth provided by the dataset for the
+    training user-item pairs is obtained by maximizing the truth value of the predicate Sim. The predicate Sim takes
+    as input a predicted score and the ground truth, and returns a value in the range [0., 1.]. Higher the value,
+    higher the closeness between the predicted score and the ground truth.
+    """
+
+    def __init__(self, mf_model, optimizer, alpha=10, p=2, wandb_train=False):
+        """
+        Constructor of the trainer for the LTN with MF as base model.
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param alpha: coefficient for smoothing equality predicate
+        :param gamma: exponent used in the equality predicate to give more weight to larger error, if needed
+        :param p: hyper-parameter p of universal quantifier aggregator
+        :param wandb_train: whether the information about the training of the model has to be logged on WandB or not
+        """
+        super(LTNTrainerMFBPR, self).__init__(mf_model, optimizer, wandb_train)
+        self.Score = ltn.Function(self.model)
+        # self.Dissim = ltn.Predicate(func=lambda pred_pos, pred_neg: torch.exp(
+        #     -alpha * (1 / (pred_pos - pred_neg))))
+        self.Sigmoid = torch.nn.Sigmoid()
+        # todo provare sia con sigmoide e basta e anche con questo esponenziale
+        # self.Dissim = ltn.Predicate(func=lambda pred_pos, pred_neg: torch.exp(-alpha * (1 / self.Sigmoid(pred_pos -
+        #                                                                                                  pred_neg))))
+        self.Dissim = ltn.Predicate(func=lambda pred_pos, pred_neg: self.Sigmoid(pred_pos - pred_neg))
+        self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
+        self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
+
+    def train_epoch(self, train_loader):
+        train_loss, train_sat_agg = 0.0, 0.0
+        for batch_idx, (u, i_pos, i_neg) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            train_sat = self.Forall(ltn.diag(u, i_pos, i_neg), self.Dissim(self.Score(u, i_pos),
+                                                                           self.Score(u, i_neg))).value
+            train_sat_agg += train_sat.item()
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += loss.item()
         return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
 
 
@@ -556,37 +585,71 @@ class LTNTrainerMFClassifier(MFTrainer):
     Same trainer as the previous one, but for classification.
     """
 
-    def __init__(self, mf_model, optimizer, alpha, scheduler=None):
+    def __init__(self, mf_model, optimizer, p_pos=2, p_neg=2, p_sat_agg=2, wandb_train=False, threshold=0.5):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
         :param optimizer: optimizer used for the training of the model
-        :param alpha: coefficient of smooth equality predicate
+        :param p_pos: hyper-parameter p for universal quantifier aggregator used on positive examples
+        :param p_neg: hyper-parameter p for universal quantifier aggregator used on negative examples
+        :param wandb_train: whether the training information has to be logged on WandB or not
+        :param threshold: threshold used for the decision boundary
         """
-        super(LTNTrainerMFClassifier, self).__init__(mf_model, optimizer)
-        self.Likes = ltn.Function(self.model)
-        self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.square(pred - gt)))
+        super(LTNTrainerMFClassifier, self).__init__(mf_model, optimizer, wandb_train)
+        self.Likes = ltn.Predicate(self.model)
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
         self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(), quantifier='f')
-        self.sat_agg = ltn.fuzzy_ops.SatAgg()
-        self.scheduler = scheduler
+        self.p_pos = p_pos
+        self.p_neg = p_neg
+        self.threshold = threshold
+        self.sat_agg = ltn.fuzzy_ops.SatAgg(agg_op=ltn.fuzzy_ops.AggregPMeanError(p=p_sat_agg))
 
     def train_epoch(self, train_loader):
-        train_loss, train_sat_agg = 0.0, 0.0
-        for batch_idx, (u, i, r) in enumerate(train_loader):
+        train_loss, train_sat_agg, f1_sat, f2_sat = 0.0, 0.0, [], []
+        for batch_idx, (u_pos, i_pos, u_neg, i_neg) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            train_sat = self.Forall(ltn.diag(u, i, r), self.Sim(self.Likes(u, i), r)).value
+            if u_pos is not None and u_neg is not None:
+                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
+                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
+                f1_sat.append(f1.value.item())
+                f2_sat.append(f2.value.item())
+                train_sat = self.sat_agg(f1, f2)
+            elif u_pos is not None:
+                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
+                f1_sat.append(f1.value.item())
+                train_sat = f1.value
+            else:
+                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
+                f2_sat.append(f2.value.item())
+                train_sat = f2.value
             train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-        if self.scheduler is not None:
-            self.scheduler.step()
-        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
+                                                "pos_sat": np.mean(f1_sat),
+                                                "neg_sat": np.mean(f2_sat)}
+
+    def predict(self, x, dim=1, binarize=False):
+        """
+        Method for performing a prediction of the model.
+        :param x: tensor containing the user-item pair for which the prediction has to be computed. The first position
+        is the user index, while the second position is the item index
+        :param dim: dimension across which the dot product of the MF has to be computed
+        :param binarize: whether the prediction has to be binarized using the decision boundary. This is useful because
+        some metrics requires the binarization, while other not
+        :return: the prediction of the model for the given user-item pair
+        """
+        u_idx, i_idx = x[:, 0], x[:, 1]
+        with torch.no_grad():
+            preds = self.model(u_idx, i_idx, dim)
+            if binarize:
+                preds = preds >= self.threshold
+            return preds
 
 
-class LTNTrainerMFGenres(LTNTrainerMF):
+class LTNTrainerMFGenres(MFTrainer):
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function. In
     addition, unlike the previous model, this LTN has an additional axiom in the loss function. This axiom serves as
@@ -644,7 +707,7 @@ class LTNTrainerMFGenres(LTNTrainerMF):
                                                 "training_sat_axiom_2": f2_sat / len(train_loader)}
 
 
-class LTNTrainerMFGenresNew(LTNTrainerMF):
+class LTNTrainerMFGenresNew(MFTrainer):
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function. In
     addition, unlike the previous model, this LTN has an additional axiom in the loss function. This axiom serves as
