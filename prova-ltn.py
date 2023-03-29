@@ -49,6 +49,7 @@ optimizer = Adam(mf.parameters(), lr=0.01, weight_decay=0.0001)
 #  non si puo' usare
 # todo confrontare con focal loss come va, vedere come ottenere risulati simili
 # todo sembra quasi impossibile far spostare LTN dal decision boundary sui problemi un minimo piu' complessi di una classificazione binaria toy
+# todo come dice Luciano ce ne possiamo fregare della loss finale e non metterla in zero uno e fare tipo la somma dei valori di verita' e cosi via
 # trainer = LTNTrainerMFRegression(mf, optimizer, alpha=1, exp=2, p=2, wandb_train=False)
 trainer = LTNTrainerMFClassifier(mf, optimizer, p_pos=2, p_neg=2, p_sat_agg=2, wandb_train=False, threshold=0.5)
 # trainer = LTNTrainerMFBPR(mf, optimizer, alpha=2, p=2, wandb_train=False)

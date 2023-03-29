@@ -7,6 +7,7 @@ from SPARQLWrapper import SPARQLWrapper, JSON, POST
 from scipy.sparse import csr_matrix
 from ltnrec.utils import set_seed
 from sklearn.model_selection import train_test_split as train_test_split_sklearn
+import torch
 
 
 # todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un
@@ -709,7 +710,7 @@ class DataManager:
                                          (list(mr_genre_triples["head_uri"]),
                                           list(mr_genre_triples["tail_uri"]))), shape=(n_items, n_genres))
 
-        return n_users, n_genres, n_items, genre_folds, movie_folds, item_genres_matrix
+        return n_users, n_genres, n_items, genre_folds, movie_folds, torch.tensor(item_genres_matrix.toarray())
 
     def get_mr_100k_genre_ratings(self):
         # get MindReader-100k entities

@@ -1,9 +1,9 @@
 import os.path
 import sys
-
 import ltn
 import torch
 import numpy as np
+import torch.nn.functional as F
 from ltnrec.metrics import compute_metric, check_metrics
 from ltnrec.loaders import ValDataLoaderRatings, TrainingDataLoader, TrainingDataLoaderLTNGenres, ValDataLoaderRanking
 import json
@@ -29,9 +29,40 @@ class FocalLoss(torch.nn.Module):
     def forward(self, inputs, targets):
         bce_loss = self.bce(inputs, targets)
         loss = torch.where(targets == 1,
-                           self.alpha * (1 - inputs) ** self.gamma * bce_loss,
-                           (1 - self.alpha) * inputs ** self.gamma * bce_loss)
+                           self.alpha * ((1 - inputs) ** self.gamma) * bce_loss,
+                           (1 - self.alpha) * (inputs ** self.gamma) * bce_loss)
         return torch.mean(loss) if self.reduction == "mean" else torch.sum(loss)
+
+
+class FocalLossPyTorch(torch.nn.Module):
+    def __init__(self, alpha=0.2, gamma=2, reduction="mean"):
+        super(FocalLossPyTorch, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.bce = torch.nn.BCELoss(reduction="none")
+        self.reduction = reduction
+
+    def forward(self, inputs, targets):
+        p = torch.sigmoid(inputs)
+        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+        p_t = p * targets + (1 - p) * (1 - targets)
+        loss = ce_loss * ((1 - p_t) ** self.gamma)
+
+        if self.alpha >= 0:
+            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+            loss = alpha_t * loss
+
+        if self.reduction == "none":
+            pass
+        elif self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
+        else:
+            raise ValueError(
+                f"Invalid Value for arg 'reduction': '{self.reduction} \n Supported reduction modes: "
+                f"'none', 'mean', 'sum'")
+        return loss
 
 
 class MatrixFactorization(torch.nn.Module):
@@ -41,7 +72,7 @@ class MatrixFactorization(torch.nn.Module):
     embeddings of the items of the system.
     """
 
-    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001, dropout_p=0., normalize=False):
+    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001):
         """
         Construction of the matrix factorization model.
         :param n_users: number of users in the dataset
@@ -50,22 +81,16 @@ class MatrixFactorization(torch.nn.Module):
         :param biased: whether the MF model must include user and item biases or not, default to False
         """
         super(MatrixFactorization, self).__init__()
-        self.dropout = torch.nn.Dropout(p=dropout_p)
         self.u_emb = torch.nn.Embedding(n_users, n_factors)
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
         torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
         torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
-        # torch.nn.init.xavier_normal_(self.u_emb.weight)
-        # torch.nn.init.xavier_normal_(self.i_emb.weight)
         self.biased = biased
         if biased:
             self.u_bias = torch.nn.Embedding(n_users, 1)
             self.i_bias = torch.nn.Embedding(n_items, 1)
             torch.nn.init.normal_(self.u_bias.weight, 0.0, init_std)
             torch.nn.init.normal_(self.i_bias.weight, 0.0, init_std)
-        self.normalize = normalize
-        if normalize:
-            self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, u_idx, i_idx, dim=1):
         """
@@ -75,10 +100,55 @@ class MatrixFactorization(torch.nn.Module):
         :param dim: dimension along which the dot product has to be computed
         :return: predicted scores for given user-item pairs
         """
-        pred = torch.sum(self.dropout(self.u_emb(u_idx)) * self.dropout(self.i_emb(i_idx)), dim=dim, keepdim=True)
+        pred = torch.sum(self.u_emb(u_idx) * self.i_emb(i_idx), dim=dim, keepdim=True)
         if self.biased:
-            pred += self.dropout(self.u_bias(u_idx)) + self.dropout(self.i_bias(i_idx))
-        return pred.squeeze() if not self.normalize else self.sigmoid(pred.squeeze())
+            pred += self.u_bias(u_idx) + self.i_bias(i_idx)
+        return pred.squeeze()
+
+
+class MatrixFactorizationLTN(MatrixFactorization):
+    """
+    Matrix factorization model designed to work with the LTN framework.
+    The model has inside two matrices: one containing the embeddings of the users of the system, one containing the
+    embeddings of the items of the system.
+    """
+
+    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001, normalize=False):
+        """
+        Construction of the matrix factorization model.
+        :param n_users: number of users in the dataset
+        :param n_items: number of items in the dataset
+        :param n_factors: size of embeddings for users and items
+        :param biased: whether the MF model must include user and item biases or not, default to False
+        :param normalize: whether the output has to be normalized in [0., 1.] or not. It is useful when this model
+        is used with the LTN framework. In fact, this model could implement an LTN function or predicate. Predicates
+        require the output to be in the range [0., 1.] while functions usually not. Defaults to False.
+        """
+        super(MatrixFactorization, self).__init__()
+        self.u_emb = torch.nn.Embedding(n_users, n_factors)
+        self.i_emb = torch.nn.Embedding(n_items, n_factors)
+        torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
+        torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
+        self.biased = biased
+        if biased:
+            self.u_bias = torch.nn.Embedding(n_users, 1)
+            self.i_bias = torch.nn.Embedding(n_items, 1)
+            torch.nn.init.normal_(self.u_bias.weight, 0.0, init_std)
+            torch.nn.init.normal_(self.i_bias.weight, 0.0, init_std)
+        self.normalize = normalize
+
+    def forward(self, u_idx, i_idx, dim=1):
+        """
+        It computes the scores for the given user-item pairs using the matrix factorization approach (dot product).
+        :param u_idx: users for which the score has to be computed
+        :param i_idx: items for which the score has to be computed
+        :param dim: dimension along which the dot product has to be computed
+        :return: predicted scores for given user-item pairs
+        """
+        pred = super().forward(u_idx, i_idx, dim)
+        if self.normalize:
+            pred = torch.sigmoid(pred)
+        return pred
 
 
 class DeepMatrixFactorization(torch.nn.Module):
@@ -486,13 +556,14 @@ class MFTrainerClassifier(MFTrainer):
         """
         u_idx, i_idx = x[:, 0], x[:, 1]
         with torch.no_grad():
-            preds = self.model(u_idx, i_idx, dim)
+            # apply sigmoid because during training losses with logits are used for numerical stability
+            pred = torch.sigmoid(self.model(u_idx, i_idx, dim))
             if binarize:
-                preds = preds >= self.threshold
-            return preds
+                pred = pred >= self.threshold
+            return pred
 
 
-class LTNTrainerMFRegression(MFTrainer):
+class LTNTrainerMFRegression(Trainer):
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function.
     The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
@@ -533,7 +604,7 @@ class LTNTrainerMFRegression(MFTrainer):
         return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
 
 
-class LTNTrainerMFBPR(MFTrainer):
+class LTNTrainerMFBPR(Trainer):
     """
     Trainer for the Logic Tensor Network with Matrix Factorization as the predictive model for the Likes function.
     The Likes function takes as input a user-item pair and produce an un-normalized score (MF). Ideally, this score
@@ -580,7 +651,7 @@ class LTNTrainerMFBPR(MFTrainer):
         return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader)}
 
 
-class LTNTrainerMFClassifier(MFTrainer):
+class LTNTrainerMFClassifier(Trainer):
     """
     Same trainer as the previous one, but for classification.
     """
@@ -615,13 +686,13 @@ class LTNTrainerMFClassifier(MFTrainer):
                 f2_sat.append(f2.value.item())
                 train_sat = self.sat_agg(f1, f2)
             elif u_pos is not None:
-                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
-                f1_sat.append(f1.value.item())
-                train_sat = f1.value
+                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos).value
+                f1_sat.append(f1.item())
+                train_sat = f1
             else:
-                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
-                f2_sat.append(f2.value.item())
-                train_sat = f2.value
+                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg).value
+                f2_sat.append(f2.item())
+                train_sat = f2
             train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
@@ -643,10 +714,89 @@ class LTNTrainerMFClassifier(MFTrainer):
         """
         u_idx, i_idx = x[:, 0], x[:, 1]
         with torch.no_grad():
+            # here, sigmoid does not have to be applied since LTN matrix factorization has the normalize parameter to
+            # normalize the output if needed
             preds = self.model(u_idx, i_idx, dim)
             if binarize:
                 preds = preds >= self.threshold
             return preds
+
+
+class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
+    """
+    Same trainer as the previous one, but that includes the formula for performing transfer learning.
+    """
+
+    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, p_pos=2, p_neg=2, p_sat_agg=2, p_forall=2,
+                 p_exists=2, wandb_train=False, threshold=0.5):
+        """
+        Constructor of the trainer for the LTN with MF as base model.
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param u_g_matrix: users X genres matrix, containing the ratings predicted for each user-genre pair in the
+        dataset. This is the pre-trained model.
+        :param i_g_matrix: items X genres matrix, containing a 1 if the item i belongs to genre j, 0 otherwise
+        :param p_pos: hyper-parameter p for universal quantifier aggregator used on positive examples
+        :param p_neg: hyper-parameter p for universal quantifier aggregator used on negative examples
+        :param p_forall: hyper-parameter p for universal quantifier aggregator used on second formula
+        :param p_exists: hyper-parameter p for existential quantifier aggregator used on second formula
+        :param wandb_train: whether the training information has to be logged on WandB or not
+        :param threshold: threshold used for the decision boundary
+        """
+        super(LTNTrainerMFClassifierTransferLearning, self).__init__(mf_model, optimizer, p_pos, p_neg, p_sat_agg,
+                                                                     wandb_train, threshold)
+        self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
+        self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
+        self.u_g_matrix = u_g_matrix
+        self.LikesGenre = ltn.Predicate(func=lambda u_idx, g_idx: self.u_g_matrix[u_idx, g_idx])
+        self.genres = ltn.Variable("genres", torch.tensor(range(self.u_g_matrix.shape[1])), add_batch_dim=False)
+        self.i_g_matrix = i_g_matrix
+        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: self.i_g_matrix[i_idx, g_idx])
+        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier='e')
+        self.p_forall = p_forall
+        self.p_exists = p_exists
+
+    def train_epoch(self, train_loader):
+        train_loss, train_sat_agg, f1_sat, f2_sat, f3_sat = 0.0, 0.0, [], [], []
+        for batch_idx, (u_pos, i_pos, u_neg, i_neg, users, items) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            # create LTN variables containing all batch interactions
+            # users = ltn.Variable("users", torch.cat([u_pos.value, u_neg.value], dim=0), add_batch_dim=False)
+            # items = ltn.Variable("items", torch.cat([i_pos.value, i_neg.value], dim=0), add_batch_dim=False)
+            # compute SAT level of third formula
+            f3 = self.Forall(ltn.diag(users, items),
+                             self.Implies(
+                                 self.Exists(self.genres,
+                                             self.And(
+                                                 self.Not(self.LikesGenre(users, self.genres)),
+                                                 self.HasGenre(items, self.genres)
+                                             ), p=self.p_exists),
+                                 self.Not(self.Likes(users, items))),
+                             p=self.p_forall)
+            f3_sat.append(f3.value.item())
+            if u_pos is not None and u_neg is not None:
+                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
+                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
+                f1_sat.append(f1.value.item())
+                f2_sat.append(f2.value.item())
+                train_sat = self.sat_agg(f1, f2, f3)
+            elif u_pos is not None:
+                f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos).value
+                f1_sat.append(f1.item())
+                train_sat = self.sat_agg(f1, f3)
+            else:
+                f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg).value
+                f2_sat.append(f2.item())
+                train_sat = self.sat_agg(f2, f3)
+            train_sat_agg += train_sat.item()
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += loss.item()
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
+                                                "pos_sat": np.mean(f1_sat),
+                                                "neg_sat": np.mean(f2_sat),
+                                                "f3_sat": np.mean(f3_sat)}
 
 
 class LTNTrainerMFGenres(MFTrainer):
