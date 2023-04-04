@@ -11,7 +11,7 @@ from torch.optim import Adam
 from ltnrec.utils import set_seed, remove_seed_from_dataset_name
 import wandb
 import pickle
-from sklearn.metrics import f1_score, precision_recall_fscore_support, confusion_matrix
+from sklearn.metrics import f1_score, precision_recall_fscore_support, confusion_matrix, accuracy_score
 
 # create global wandb api object
 api = wandb.Api()
@@ -344,8 +344,8 @@ class Trainer:
             val_score = np.mean(np.concatenate(val_score))
         else:
             assert isinstance(val_loader, ValDataLoaderRatings), "You selected a regression or classification metric" \
-                                                                  " as validation metric but you are not using the " \
-                                                                  "ValDataLoaderRatings."
+                                                                 " as validation metric but you are not using the " \
+                                                                 "ValDataLoaderRatings."
             for batch_idx, (X, y) in enumerate(val_loader):
                 if "fbeta" not in val_metric and val_metric != "acc":
                     preds = self.predict(X)
@@ -409,44 +409,91 @@ class Trainer:
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    def test(self, test_loader, metrics):
+    def test(self, test_loader, test_mode, fbeta=None):
         """
-        Method for performing the test of the model based on the given test data and test metrics.
+        Method for performing the test of the model based on the given test data and test mode.
+
+        Based on the selected mode, the method computes different test metrics.
+
+        If 'auc' is selected, the method computes the AUC.
+        If '1+random' is selected, the method computes hit, recall, and ndcg with k in {5, 10, 20}.
+        If 'rating-prediction' is selected, the method computes all the classification related metrics (precision,
+        recall, F1-score, sensitivity, specificity) plus the MSE and RMSE metrics.
+
         :param test_loader: data loader for test data
-        :param metrics: metric name or list of metrics' names that have to be computed
-        :return: a dictionary containing the value of each metric average across the test batches
+        :param test_mode: str indicating the test mode ('auc', '1+random', or 'rating-prediction')
+        :param fbeta: the name of the fbeta metric. Useful if one wants to use a beta different from 1.0. It is a string
+        with the following structure: fbeta-beta, when beta is a float between 0. and 2.0.
+        :return: a dictionary containing the value of each metric average across the test examples
         """
-        pass
-        # check_metrics(metrics)
-        # if isinstance(metrics, str):
-        #     metrics = [metrics]
-        #
-        # results = {m: [] for m in metrics}
-        # if isinstance(test_loader, ValDataLoaderExact):
-        #     with torch.no_grad():
-        #         predicted_scores = torch.matmul(self.model.u_emb.weight.data, torch.t(self.model.i_emb.weight.data))
-        #         if self.model.biased:
-        #             predicted_scores = torch.add(predicted_scores, self.model.u_bias.weight.data)
-        #             predicted_scores = torch.add(predicted_scores, torch.t(self.model.i_bias.weight.data))
-        #     for batch_idx, (test_users, mask, ground_truth) in enumerate(test_loader):
-        #         for m in results:
-        #             results[m].append(
-        #                 compute_metric(m, np.where(mask == 1, -np.inf, predicted_scores[test_users].numpy()),
-        #                                ground_truth))
-        #     # for batch_idx, (data, mask, ground_truth) in enumerate(test_loader):
-        #     #     for m in results:
-        #     # predicted_scores = self.predict(data.view(-1, 2))
-        #     # results[m].append(compute_metric(m, predicted_scores.view(ground_truth.shape).numpy() * mask,
-        #     #                                  ground_truth))
-        # else:
-        #     for batch_idx, (data, ground_truth) in enumerate(test_loader):
-        #         for m in results:
-        #             predicted_scores = self.predict(data.view(-1, 2))
-        #             results[m].append(
-        #                 compute_metric(m, predicted_scores.view(ground_truth.shape).numpy(), ground_truth))
-        # for m in results:
-        #     results[m] = np.mean(np.concatenate(results[m]))
-        # return results
+        preds_vector, gt_vector = [], []
+        # creates metrics list
+        if test_mode == "auc":
+            assert isinstance(test_loader, ValDataLoaderRanking), "You selected test_mode 'auc', but you did not " \
+                                                                  "pass a ValDataLoaderRanking."
+            metrics = ["auc"]
+        elif test_mode == "1+random":
+            assert isinstance(test_loader, ValDataLoaderRanking), "You selected test_mode '1+random', but you did " \
+                                                                  "not pass a ValDataLoaderRanking."
+            metrics = ["%s@%d" % (m, k) for m in ("hit", "recall", "ndcg") for k in (5, 10, 20)]
+        else:
+            assert isinstance(test_loader, ValDataLoaderRatings), "You selected test_mode 'rating-prediction', but " \
+                                                                  "you did not pass a ValDataLoaderRatings."
+            if isinstance(self, LTNTrainerMFRegression):
+                metrics = ["mse", "rmse"]
+            else:
+                # note that it is possible to compute mse and rmse in these cases even if we have to use the sigmoid
+                # on the output. This is possible since we are using binary ratings (0 or 1)
+                metrics = [fbeta if fbeta is not None else "fbeta-1.0", "mse", "rmse"]
+
+        # create dictionary where the results have to be stored
+        results = {m: ([] if "fbeta" not in m else {}) for m in metrics}
+
+        # cycle over batches and computes the requested metrics
+        for batch_idx, (X, y) in enumerate(test_loader):
+            if isinstance(test_loader, ValDataLoaderRanking):
+                preds = self.predict(X.view(-1, 2))
+            else:
+                if isinstance(self, (LTNTrainerMFClassifier, LTNTrainerMFClassifierTransferLearning,
+                                     MFTrainerClassifier)):
+                    preds = self.predict(X, binarize=True)
+                    preds_vector.append(preds)
+                    gt_vector.append(y)
+                else:
+                    preds = self.predict(X)
+            for m in results:
+                if "fbeta" not in m:
+                    results[m].append(
+                        compute_metric(m, preds.numpy().reshape(y.shape)
+                        if isinstance(test_loader, ValDataLoaderRanking) else preds.numpy(), y))
+
+        # aggregate and return results
+        for m in results:
+            if "fbeta" in m:
+                preds_vector = np.concatenate(preds_vector)
+                gt_vector = np.concatenate(gt_vector)
+                results[m][m] = compute_metric(m, preds_vector, gt_vector)
+                p, r, f, _ = precision_recall_fscore_support(gt_vector, preds_vector,
+                                                             beta=float(m.split("-")[1]), average=None)
+                results[m]["neg_prec"] = p[0]
+                results[m]["pos_prec"] = p[1]
+                results[m]["neg_rec"] = r[0]
+                results[m]["pos_rec"] = r[1]
+                results[m]["neg_f"] = f[0]
+                results[m]["pos_f"] = f[1]
+
+                results[m]["tn"], results[m]["fp"], results[m]["fn"], results[m]["tp"] = \
+                    tuple(confusion_matrix(gt_vector, preds_vector).ravel())
+
+                results[m]["sensitivity"] = results[m]["tp"] / (results[m]["tp"] + results[m]["fn"])
+                results[m]["specificity"] = results[m]["tn"] / (results[m]["tn"] + results[m]["fp"])
+
+                results[m]["acc"] = accuracy_score(gt_vector, preds_vector)
+            else:
+                results[m] = np.mean(np.concatenate(results[m]))
+                if m == "rmse":
+                    results[m] = np.sqrt(results[m])
+        return results
 
 
 class MFTrainer(Trainer):
@@ -727,8 +774,9 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
     Same trainer as the previous one, but that includes the formula for performing transfer learning.
     """
 
-    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, p_pos=2, p_neg=2, p_sat_agg=2, p_forall=2,
-                 p_exists=2, wandb_train=False, threshold=0.5):
+    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, p_pos=2, p_neg=2, p_sat_agg=2, p_forall_f1=2,
+                 p_in_f1=2, forall_f1=False, f2=False, p_forall_f2=2, p_in_f2=2, forall_f2=False,
+                 wandb_train=False, threshold=0.5):
         """
         Constructor of the trainer for the LTN with MF as base model.
         :param mf_model: Matrix Factorization model to implement the Likes function
@@ -738,8 +786,22 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
         :param i_g_matrix: items X genres matrix, containing a 1 if the item i belongs to genre j, 0 otherwise
         :param p_pos: hyper-parameter p for universal quantifier aggregator used on positive examples
         :param p_neg: hyper-parameter p for universal quantifier aggregator used on negative examples
-        :param p_forall: hyper-parameter p for universal quantifier aggregator used on second formula
-        :param p_exists: hyper-parameter p for existential quantifier aggregator used on second formula
+        :param p_sat_agg: hyper-parameter p for universal quantifier aggregator used in the sat agg operator
+        :param p_forall_f1: hyper-parameter p for universal quantifier aggregator used on first transfer learning
+        formula
+        :param p_in_f1: hyper-parameter p for quantifier aggregator internally used on first transfer learning
+        formula
+        :param forall_f1: whether a universal quantifier or an existential quantifier have to be used internally on
+        the first transfer learning formula
+        :param f2: whether the positive formula which transfer genre information has to be added to the
+        knowledge base or not. The formula states that if a user Likes all the genres of a movie, than he should like
+        movie.
+        :param p_forall_f2: hyper-parameter p for universal quantifier aggregator used on second transfer learning
+        formula
+        :param p_in_f2: hyper-parameter p for quantifier aggregator internally used on second transfer learning
+        formula
+        :param forall_f2: whether a universal quantifier or an existential quantifier have to be used internally on
+        the second transfer learning formula
         :param wandb_train: whether the training information has to be logged on WandB or not
         :param threshold: threshold used for the decision boundary
         """
@@ -753,41 +815,62 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
         self.i_g_matrix = i_g_matrix
         self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: self.i_g_matrix[i_idx, g_idx])
         self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier='e')
-        self.p_forall = p_forall
-        self.p_exists = p_exists
+        self.p_forall_f1 = p_forall_f1
+        self.p_in_f1 = p_in_f1
+        if forall_f1:
+            self.f1_in_agg = self.Forall
+        else:
+            self.f1_in_agg = self.Exists
+        self.f2 = f2
+        if f2:
+            self.p_forall_f2 = p_forall_f2
+            self.p_in_f2 = p_in_f2
+            if forall_f2:
+                self.f2_in_agg = self.Forall
+            else:
+                self.f2_in_agg = self.Exists
 
     def train_epoch(self, train_loader):
-        train_loss, train_sat_agg, f1_sat, f2_sat, f3_sat = 0.0, 0.0, [], [], []
+        train_loss, train_sat_agg, f1_sat, f2_sat, f3_sat, f4_sat = 0.0, 0.0, [], [], [], []
         for batch_idx, (u_pos, i_pos, u_neg, i_neg, users, items) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            # create LTN variables containing all batch interactions
-            # users = ltn.Variable("users", torch.cat([u_pos.value, u_neg.value], dim=0), add_batch_dim=False)
-            # items = ltn.Variable("items", torch.cat([i_pos.value, i_neg.value], dim=0), add_batch_dim=False)
             # compute SAT level of third formula
             f3 = self.Forall(ltn.diag(users, items),
                              self.Implies(
-                                 self.Exists(self.genres,
-                                             self.And(
-                                                 self.Not(self.LikesGenre(users, self.genres)),
-                                                 self.HasGenre(items, self.genres)
-                                             ), p=self.p_exists),
+                                 self.f1_in_agg(self.genres,
+                                                self.And(
+                                                    self.Not(self.LikesGenre(users, self.genres)),
+                                                    self.HasGenre(items, self.genres)
+                                                ), p=self.p_in_f1),
                                  self.Not(self.Likes(users, items))),
-                             p=self.p_forall)
+                             p=self.p_forall_f1)
+            # f3 = self.Forall(ltn.diag(users, items), self.Not(self.Likes(users, items)))
             f3_sat.append(f3.value.item())
+            if self.f2:
+                f4 = self.Forall(ltn.diag(users, items),
+                                 self.Implies(
+                                     self.f2_in_agg(self.genres,
+                                                    self.And(
+                                                        self.LikesGenre(users, self.genres),
+                                                        self.HasGenre(items, self.genres)
+                                                    ), p=self.p_in_f2),
+                                     self.Likes(users, items)),
+                                 p=self.p_forall_f2)
+                f4_sat.append(f4.value.item())
             if u_pos is not None and u_neg is not None:
                 f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
                 f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
                 f1_sat.append(f1.value.item())
                 f2_sat.append(f2.value.item())
-                train_sat = self.sat_agg(f1, f2, f3)
+                train_sat = self.sat_agg(f1, f2, f3) if not self.f2 else self.sat_agg(f1, f2, f3, f4)
             elif u_pos is not None:
                 f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos).value
                 f1_sat.append(f1.item())
-                train_sat = self.sat_agg(f1, f3)
+                train_sat = self.sat_agg(f1, f3) if not self.f2 else self.sat_agg(f1, f3, f4)
             else:
                 f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg).value
                 f2_sat.append(f2.item())
-                train_sat = self.sat_agg(f2, f3)
+                train_sat = self.sat_agg(f2, f3) if not self.f2 else self.sat_agg(f2, f3, f4)
             train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
@@ -796,7 +879,12 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
         return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
                                                 "pos_sat": np.mean(f1_sat),
                                                 "neg_sat": np.mean(f2_sat),
-                                                "f3_sat": np.mean(f3_sat)}
+                                                "f3_sat": np.mean(f3_sat)} if not self.f2 else \
+            {"training_overall_sat": train_sat_agg / len(train_loader),
+             "pos_sat": np.mean(f1_sat),
+             "neg_sat": np.mean(f2_sat),
+             "f3_sat": np.mean(f3_sat),
+             "f4_sat": np.mean(f4_sat)}
 
 
 class LTNTrainerMFGenres(MFTrainer):
@@ -945,7 +1033,8 @@ class LTNTrainerMFGenresNew(MFTrainer):
             print(self.Exists(g, self.HasGenre(i2, g)).value)
             print("self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g)))")
             print(self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))).value)
-            print("self.Implies(self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),self.Sim(self.Likes(u2, i2), r_))")
+            print(
+                "self.Implies(self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),self.Sim(self.Likes(u2, i2), r_))")
             print(self.Implies(
                 self.Exists(g, self.And(self.Sim(self.LikesGenre(u2, g), r_), self.HasGenre(i2, g))),
                 self.Sim(self.Likes(u2, i2), r_)).value)

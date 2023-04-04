@@ -69,7 +69,7 @@ class TrainingDataLoaderLTNClassification:
         :param shuffle: whether to shuffle data during training or not
         """
         if non_relevant_sampling:
-            assert n_users is not None and n_items is not None, "When neg_relevant_sampling is True, n_users and " \
+            assert n_users is not None and n_items is not None, "When non_relevant_sampling is True, n_users and " \
                                                                 "n_items are required to perform the sampling."
         self.data = np.array(data)
         self.non_relevant_sampling = non_relevant_sampling
