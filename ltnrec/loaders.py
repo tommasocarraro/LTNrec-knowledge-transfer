@@ -14,15 +14,29 @@ class TrainingDataLoaderLTNRegression:
 
     def __init__(self,
                  data,
+                 non_relevant_sampling=False,
+                 n_users=None,
+                 n_items=None,
                  batch_size=1,
                  shuffle=True):
         """
         Constructor of the training data loader.
         :param data: list of triples (user, item, rating)
+        :param non_relevant_sampling: whether the batch has to include non-relevant user-item interactions. This is
+        useful when the loader is used to train a model that uses transfer learning. The transfer learning is applied
+        to these non-relevant interactions (holes of the user-item matrix)
+        :param n_users: number of users in the dataset. It is used when non_relevent_sampling is True
+        :param n_items: number of items in the dataset. It is used when non_relevant_sampling is True
         :param batch_size: batch size for the training of the model
         :param shuffle: whether to shuffle data during training or not
         """
+        if non_relevant_sampling:
+            assert n_users is not None and n_items is not None, "When non_relevant_sampling is True, n_users and " \
+                                                                "n_items are required to perform the sampling."
         self.data = np.array(data)
+        self.non_relevant_sampling = non_relevant_sampling
+        self.n_users = n_users
+        self.n_items = n_items
         self.batch_size = batch_size
         self.shuffle = shuffle
 
@@ -39,9 +53,21 @@ class TrainingDataLoaderLTNRegression:
             end_idx = min(start_idx + self.batch_size, n)
             data = self.data[idxlist[start_idx:end_idx]]
 
-            yield ltn.Variable('users', torch.tensor(data[:, 0]), add_batch_dim=False), \
-                  ltn.Variable('items', torch.tensor(data[:, 1]), add_batch_dim=False), \
-                  ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)
+            if self.non_relevant_sampling:
+                # get some non-relevant user-item pairs - the probability of sampling real user-item pairs is very low
+                # due to the sparsity of a recommendation dataset
+                u_idx = np.random.choice(self.n_users, data.shape[0])
+                i_idx = np.random.choice(self.n_items, data.shape[0])
+
+                yield ltn.Variable('users_', torch.tensor(data[:, 0]), add_batch_dim=False), \
+                      ltn.Variable('items_', torch.tensor(data[:, 1]), add_batch_dim=False), \
+                      ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False), \
+                      ltn.Variable('users', torch.tensor(u_idx), add_batch_dim=False), \
+                      ltn.Variable('items', torch.tensor(i_idx), add_batch_dim=False)
+            else:
+                yield ltn.Variable('users_', torch.tensor(data[:, 0]), add_batch_dim=False), \
+                      ltn.Variable('items_', torch.tensor(data[:, 1]), add_batch_dim=False), \
+                      ltn.Variable('ratings', torch.tensor(data[:, -1]), add_batch_dim=False)
 
 
 class TrainingDataLoaderLTNClassification:

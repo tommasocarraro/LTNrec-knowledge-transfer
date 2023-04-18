@@ -72,25 +72,22 @@ class MatrixFactorization(torch.nn.Module):
     embeddings of the items of the system.
     """
 
-    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001):
+    def __init__(self, n_users, n_items, n_factors):
         """
         Construction of the matrix factorization model.
         :param n_users: number of users in the dataset
         :param n_items: number of items in the dataset
         :param n_factors: size of embeddings for users and items
-        :param biased: whether the MF model must include user and item biases or not, default to False
         """
         super(MatrixFactorization, self).__init__()
         self.u_emb = torch.nn.Embedding(n_users, n_factors)
         self.i_emb = torch.nn.Embedding(n_items, n_factors)
-        torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
-        torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
-        self.biased = biased
-        if biased:
-            self.u_bias = torch.nn.Embedding(n_users, 1)
-            self.i_bias = torch.nn.Embedding(n_items, 1)
-            torch.nn.init.normal_(self.u_bias.weight, 0.0, init_std)
-            torch.nn.init.normal_(self.i_bias.weight, 0.0, init_std)
+        self.u_bias = torch.nn.Embedding(n_users, 1)
+        self.i_bias = torch.nn.Embedding(n_items, 1)
+        torch.nn.init.xavier_normal_(self.u_emb.weight)
+        torch.nn.init.xavier_normal_(self.i_emb.weight)
+        torch.nn.init.xavier_normal_(self.u_bias.weight)
+        torch.nn.init.xavier_normal_(self.i_bias.weight)
 
     def forward(self, u_idx, i_idx, dim=1):
         """
@@ -101,8 +98,7 @@ class MatrixFactorization(torch.nn.Module):
         :return: predicted scores for given user-item pairs
         """
         pred = torch.sum(self.u_emb(u_idx) * self.i_emb(i_idx), dim=dim, keepdim=True)
-        if self.biased:
-            pred += self.u_bias(u_idx) + self.i_bias(i_idx)
+        pred += self.u_bias(u_idx) + self.i_bias(i_idx)
         return pred.squeeze()
 
 
@@ -113,28 +109,17 @@ class MatrixFactorizationLTN(MatrixFactorization):
     embeddings of the items of the system.
     """
 
-    def __init__(self, n_users, n_items, n_factors, biased=False, init_std=0.001, normalize=False):
+    def __init__(self, n_users, n_items, n_factors, normalize=False):
         """
         Construction of the matrix factorization model.
         :param n_users: number of users in the dataset
         :param n_items: number of items in the dataset
         :param n_factors: size of embeddings for users and items
-        :param biased: whether the MF model must include user and item biases or not, default to False
         :param normalize: whether the output has to be normalized in [0., 1.] or not. It is useful when this model
         is used with the LTN framework. In fact, this model could implement an LTN function or predicate. Predicates
         require the output to be in the range [0., 1.] while functions usually not. Defaults to False.
         """
-        super(MatrixFactorization, self).__init__()
-        self.u_emb = torch.nn.Embedding(n_users, n_factors)
-        self.i_emb = torch.nn.Embedding(n_items, n_factors)
-        torch.nn.init.normal_(self.u_emb.weight, 0.0, init_std)
-        torch.nn.init.normal_(self.i_emb.weight, 0.0, init_std)
-        self.biased = biased
-        if biased:
-            self.u_bias = torch.nn.Embedding(n_users, 1)
-            self.i_bias = torch.nn.Embedding(n_items, 1)
-            torch.nn.init.normal_(self.u_bias.weight, 0.0, init_std)
-            torch.nn.init.normal_(self.i_bias.weight, 0.0, init_std)
+        super(MatrixFactorizationLTN, self).__init__(n_users, n_items, n_factors)
         self.normalize = normalize
 
     def forward(self, u_idx, i_idx, dim=1):
@@ -270,7 +255,7 @@ class Trainer:
 
         for epoch in range(n_epochs):
             # training step
-            train_loss, log_dict = self.train_epoch(train_loader)
+            train_loss, log_dict = self.train_epoch(train_loader, epoch + 1)
             # validation step
             val_score = self.validate(val_loader, val_metric)
             # print epoch data
@@ -305,10 +290,11 @@ class Trainer:
                     print("Training interrupted due to early stopping")
                     break
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         """
         Method for the training of one single epoch.
         :param train_loader: data loader for training data
+        :param epoch: index of epoch
         :return: training loss value averaged across training batches and a dictionary containing useful information
         to log, such as other metrics computed by this model
         """
@@ -508,7 +494,7 @@ class MFTrainer(Trainer):
         super(MFTrainer, self).__init__(mf_model, optimizer, wandb_train)
         self.loss = loss
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         # todo qui devo capire come usare la loss
         train_loss = 0.0
         for batch_idx, (u_i_pairs, ratings) in enumerate(train_loader):
@@ -534,7 +520,7 @@ class MFTrainerBPR(Trainer):
         self.loss = lambda pos, neg: -torch.sum(self.act_func(pos - neg))
         # self.loss = torch.nn.MarginRankingLoss(margin=2.0, reduction="sum")
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         train_loss = 0.0
         for batch_idx, (u_i_pairs) in enumerate(train_loader):
             self.optimizer.zero_grad()
@@ -636,9 +622,8 @@ class LTNTrainerMFRegression(Trainer):
         self.Sim = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha * torch.pow(torch.abs(pred - gt), exp)))
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
         self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
-        self.Forall_mean = ltn.Quantifier(ltn.fuzzy_ops.AggregMean(), quantifier='f')
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         train_loss, train_sat_agg = 0.0, 0.0
         for batch_idx, (u, i, r) in enumerate(train_loader):
             self.optimizer.zero_grad()
@@ -684,7 +669,7 @@ class LTNTrainerMFBPR(Trainer):
         self.Not = ltn.Connective(ltn.fuzzy_ops.NotStandard())
         self.Forall = ltn.Quantifier(ltn.fuzzy_ops.AggregPMeanError(p=p), quantifier='f')
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         train_loss, train_sat_agg = 0.0, 0.0
         for batch_idx, (u, i_pos, i_neg) in enumerate(train_loader):
             self.optimizer.zero_grad()
@@ -722,7 +707,7 @@ class LTNTrainerMFClassifier(Trainer):
         self.threshold = threshold
         self.sat_agg = ltn.fuzzy_ops.SatAgg(agg_op=ltn.fuzzy_ops.AggregPMeanError(p=p_sat_agg))
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         train_loss, train_sat_agg, f1_sat, f2_sat = 0.0, 0.0, [], []
         for batch_idx, (u_pos, i_pos, u_neg, i_neg) in enumerate(train_loader):
             self.optimizer.zero_grad()
@@ -774,8 +759,8 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
     Same trainer as the previous one, but that includes the formula for performing transfer learning.
     """
 
-    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, p_pos=2, p_neg=2, p_sat_agg=2, p_forall_f1=2,
-                 p_in_f1=2, forall_f1=False, f2=False, p_forall_f2=2, p_in_f2=2, forall_f2=False,
+    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, epoch_threshold=0, genre_idx=None, p_pos=2, p_neg=2, p_sat_agg=2,
+                 p_forall_f1=2, p_in_f1=2, forall_f1=False, f2=False, p_forall_f2=2, p_in_f2=2, forall_f2=False,
                  wandb_train=False, threshold=0.5):
         """
         Constructor of the trainer for the LTN with MF as base model.
@@ -784,6 +769,8 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
         :param u_g_matrix: users X genres matrix, containing the ratings predicted for each user-genre pair in the
         dataset. This is the pre-trained model.
         :param i_g_matrix: items X genres matrix, containing a 1 if the item i belongs to genre j, 0 otherwise
+        :param epoch_threshold: epoch from which the formulas for transfer learning have to be computed
+        :param genre_idx: list of genre indexes on which the transfer learning formula has to be applied
         :param p_pos: hyper-parameter p for universal quantifier aggregator used on positive examples
         :param p_neg: hyper-parameter p for universal quantifier aggregator used on negative examples
         :param p_sat_agg: hyper-parameter p for universal quantifier aggregator used in the sat agg operator
@@ -809,11 +796,12 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
                                                                      wandb_train, threshold)
         self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
         self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
-        self.u_g_matrix = u_g_matrix
-        self.LikesGenre = ltn.Predicate(func=lambda u_idx, g_idx: self.u_g_matrix[u_idx, g_idx])
-        self.genres = ltn.Variable("genres", torch.tensor(range(self.u_g_matrix.shape[1])), add_batch_dim=False)
-        self.i_g_matrix = i_g_matrix
-        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: self.i_g_matrix[i_idx, g_idx])
+        self.LikesGenre = ltn.Predicate(func=lambda u_idx, g_idx: u_g_matrix[u_idx, g_idx])
+        self.genres = ltn.Variable("genres",
+                                   torch.tensor(range(u_g_matrix.shape[1]) if genre_idx is None else genre_idx),
+                                   add_batch_dim=False)
+        self.epoch_threshold = epoch_threshold
+        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: i_g_matrix[i_idx, g_idx])
         self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier='e')
         self.p_forall_f1 = p_forall_f1
         self.p_in_f1 = p_in_f1
@@ -830,47 +818,57 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
             else:
                 self.f2_in_agg = self.Exists
 
-    def train_epoch(self, train_loader):
+    def train_epoch(self, train_loader, epoch=None):
         train_loss, train_sat_agg, f1_sat, f2_sat, f3_sat, f4_sat = 0.0, 0.0, [], [], [], []
         for batch_idx, (u_pos, i_pos, u_neg, i_neg, users, items) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            # compute SAT level of third formula
-            f3 = self.Forall(ltn.diag(users, items),
-                             self.Implies(
-                                 self.f1_in_agg(self.genres,
-                                                self.And(
-                                                    self.Not(self.LikesGenre(users, self.genres)),
-                                                    self.HasGenre(items, self.genres)
-                                                ), p=self.p_in_f1),
-                                 self.Not(self.Likes(users, items))),
-                             p=self.p_forall_f1)
-            # f3 = self.Forall(ltn.diag(users, items), self.Not(self.Likes(users, items)))
-            f3_sat.append(f3.value.item())
-            if self.f2:
-                f4 = self.Forall(ltn.diag(users, items),
+            if epoch > self.epoch_threshold:
+                # compute SAT level of third formula
+                f3 = self.Forall(ltn.diag(users, items),
                                  self.Implies(
-                                     self.f2_in_agg(self.genres,
+                                     self.f1_in_agg(self.genres,
                                                     self.And(
-                                                        self.LikesGenre(users, self.genres),
+                                                        self.Not(self.LikesGenre(users, self.genres)),
                                                         self.HasGenre(items, self.genres)
-                                                    ), p=self.p_in_f2),
-                                     self.Likes(users, items)),
-                                 p=self.p_forall_f2)
-                f4_sat.append(f4.value.item())
+                                                    ), p=self.p_in_f1),
+                                     self.Not(self.Likes(users, items))),
+                                 p=self.p_forall_f1)
+                # f3 = self.Forall(ltn.diag(users, items), self.Not(self.Likes(users, items)))
+                f3_sat.append(f3.value.item())
+                if self.f2:
+                    f4 = self.Forall(ltn.diag(users, items),
+                                     self.Implies(
+                                         self.f2_in_agg(self.genres,
+                                                        self.And(
+                                                            self.LikesGenre(users, self.genres),
+                                                            self.HasGenre(items, self.genres)
+                                                        ), p=self.p_in_f2),
+                                         self.Likes(users, items)),
+                                     p=self.p_forall_f2)
+                    f4_sat.append(f4.value.item())
             if u_pos is not None and u_neg is not None:
                 f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos)
                 f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg)
                 f1_sat.append(f1.value.item())
                 f2_sat.append(f2.value.item())
-                train_sat = self.sat_agg(f1, f2, f3) if not self.f2 else self.sat_agg(f1, f2, f3, f4)
+                if epoch > self.epoch_threshold:
+                    train_sat = self.sat_agg(f1, f2, f3) if not self.f2 else self.sat_agg(f1, f2, f3, f4)
+                else:
+                    train_sat = self.sat_agg(f1, f2)
             elif u_pos is not None:
                 f1 = self.Forall(ltn.diag(u_pos, i_pos), self.Likes(u_pos, i_pos), p=self.p_pos).value
                 f1_sat.append(f1.item())
-                train_sat = self.sat_agg(f1, f3) if not self.f2 else self.sat_agg(f1, f3, f4)
+                if epoch > self.epoch_threshold:
+                    train_sat = self.sat_agg(f1, f3) if not self.f2 else self.sat_agg(f1, f3, f4)
+                else:
+                    train_sat = f1.value
             else:
                 f2 = self.Forall(ltn.diag(u_neg, i_neg), self.Not(self.Likes(u_neg, i_neg)), p=self.p_neg).value
                 f2_sat.append(f2.item())
-                train_sat = self.sat_agg(f2, f3) if not self.f2 else self.sat_agg(f2, f3, f4)
+                if epoch > self.epoch_threshold:
+                    train_sat = self.sat_agg(f2, f3) if not self.f2 else self.sat_agg(f2, f3, f4)
+                else:
+                    train_sat = f2.value
             train_sat_agg += train_sat.item()
             loss = 1. - train_sat
             loss.backward()
@@ -879,12 +877,132 @@ class LTNTrainerMFClassifierTransferLearning(LTNTrainerMFClassifier):
         return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
                                                 "pos_sat": np.mean(f1_sat),
                                                 "neg_sat": np.mean(f2_sat),
-                                                "f3_sat": np.mean(f3_sat)} if not self.f2 else \
+                                                "f3_sat": np.mean(f3_sat) if f3_sat else None} if not self.f2 else \
             {"training_overall_sat": train_sat_agg / len(train_loader),
              "pos_sat": np.mean(f1_sat),
              "neg_sat": np.mean(f2_sat),
-             "f3_sat": np.mean(f3_sat),
-             "f4_sat": np.mean(f4_sat)}
+             "f3_sat": np.mean(f3_sat) if f3_sat else None,
+             "f4_sat": np.mean(f4_sat) if f4_sat else None}
+
+
+class LTNTrainerMFRegressionTransferLearning(LTNTrainerMFRegression):
+    """
+    Same trainer as the previous one, but specifically designed for regression tasks.
+    """
+
+    def __init__(self, mf_model, optimizer, u_g_matrix, i_g_matrix, epoch_threshold=0, genre_idx=None, alpha=1, exp=2, p=2, p_sat_agg=2,
+                 p_forall_f1=2, p_in_f1=2, alpha_lg=3, exp_lg=2, forall_f1=False, f2=False, p_forall_f2=2, p_in_f2=2,
+                 forall_f2=False, wandb_train=False):
+        """
+        Constructor of the trainer for the LTN with MF as base model.
+        :param mf_model: Matrix Factorization model to implement the Likes function
+        :param optimizer: optimizer used for the training of the model
+        :param u_g_matrix: users X genres matrix, containing the ratings predicted for each user-genre pair in the
+        dataset. This is the pre-trained model.
+        :param i_g_matrix: items X genres matrix, containing a 1 if the item i belongs to genre j, 0 otherwise
+        :param epoch_threshold: epoch from which the formulas on transfer learning have to be computed
+        :param genre_idx: list of genre indexes on which the transfer learning formula has to be applied
+        :param alpha: coefficient of equality predicate. It controls the smoothness of the exponential function
+        :param exp: exponent used on the errors used inside the equality predicate. The higher, the more weight to
+        larger errors
+        :param p: hyper-parameter p for universal quantifier aggregator used on the ground truth formula
+        :param p_sat_agg: hyper-parameter p of sat agg operator
+        :param p_forall_f1: hyper-parameter p for universal quantifier aggregator used on first transfer learning
+        formula
+        :param p_in_f1: hyper-parameter p for quantifier aggregator internally used on first transfer learning
+        formula
+        :param alpha_lg: coefficient of equality predicate used in the genre formula
+        :param exp_lg: exponent of errors computed by the equality predicate used in the genre formula
+        :param forall_f1: whether a universal quantifier or an existential quantifier have to be used internally on
+        the first transfer learning formula
+        :param f2: whether the positive formula which transfer genre information has to be added to the
+        knowledge base or not. The formula states that if a user Likes all the genres of a movie, than he should like
+        movie.
+        :param p_forall_f2: hyper-parameter p for universal quantifier aggregator used on second transfer learning
+        formula
+        :param p_in_f2: hyper-parameter p for quantifier aggregator internally used on second transfer learning
+        formula
+        :param forall_f2: whether a universal quantifier or an existential quantifier have to be used internally on
+        the second transfer learning formula
+        :param wandb_train: whether the training information has to be logged on WandB or not
+        """
+        super(LTNTrainerMFRegressionTransferLearning, self).__init__(mf_model, optimizer, alpha, exp, p, wandb_train)
+        self.And = ltn.Connective(ltn.fuzzy_ops.AndProd())
+        self.Implies = ltn.Connective(ltn.fuzzy_ops.ImpliesReichenbach())
+        self.ScoreGenre = ltn.Function(func=lambda u_idx, g_idx: u_g_matrix[u_idx, g_idx])
+        self.epoch_threshold = epoch_threshold
+        self.genres = ltn.Variable("genres",
+                                   torch.tensor(range(u_g_matrix.shape[1]) if genre_idx is None else genre_idx),
+                                   add_batch_dim=False)
+        self.HasGenre = ltn.Predicate(func=lambda i_idx, g_idx: i_g_matrix[i_idx, g_idx])
+        self.Exists = ltn.Quantifier(ltn.fuzzy_ops.AggregPMean(), quantifier='e')
+        self.p_forall_f1 = p_forall_f1
+        self.p_in_f1 = p_in_f1
+        self.r_ = ltn.Constant(torch.tensor(0.))  # negative rating constant
+        self.r_p = ltn.Constant(torch.tensor(1.))  # positive rating constant
+        self.sat_agg = ltn.fuzzy_ops.SatAgg(ltn.fuzzy_ops.AggregPMeanError(p=p_sat_agg))
+        self.Sim_lg = ltn.Predicate(func=lambda pred, gt: torch.exp(-alpha_lg * torch.pow(torch.abs(pred - gt), exp_lg)))
+
+        if forall_f1:
+            self.f1_in_agg = self.Forall
+        else:
+            self.f1_in_agg = self.Exists
+        self.f2 = f2
+        if f2:
+            self.p_forall_f2 = p_forall_f2
+            self.p_in_f2 = p_in_f2
+            if forall_f2:
+                self.f2_in_agg = self.Forall
+            else:
+                self.f2_in_agg = self.Exists
+
+    def train_epoch(self, train_loader, epoch=None):
+        train_loss, train_sat_agg, f1_sat, f2_sat, f3_sat, f4_sat = 0.0, 0.0, [], [], [], []
+        for batch_idx, (u, i, r, users, items) in enumerate(train_loader):
+            self.optimizer.zero_grad()
+            if epoch > self.epoch_threshold:
+                # compute SAT level of third formula
+                f3 = self.Forall(ltn.diag(users, items),
+                                 self.Implies(
+                                     self.f1_in_agg(self.genres,
+                                                    self.And(
+                                                        self.Sim_lg(self.ScoreGenre(users, self.genres), self.r_),
+                                                        self.HasGenre(items, self.genres)
+                                                    ), p=self.p_in_f1),
+                                     self.Sim(self.Score(users, items), self.r_)),
+                                 p=self.p_forall_f1)
+                # f3 = self.Forall(ltn.diag(users, items), self.Not(self.Likes(users, items)))
+                f3_sat.append(f3.value.item())
+                if self.f2:
+                    f4 = self.Forall(ltn.diag(users, items),
+                                     self.Implies(
+                                         self.f2_in_agg(self.genres,
+                                                        self.And(
+                                                            self.Sim_lg(self.ScoreGenre(users, self.genres), self.r_p),
+                                                            self.HasGenre(items, self.genres)
+                                                        ), p=self.p_in_f2),
+                                         self.Sim(self.Score(users, items), self.r_p)),
+                                     p=self.p_forall_f2)
+                    f4_sat.append(f4.value.item())
+
+            f1 = self.Forall(ltn.diag(u, i, r), self.Sim(self.Score(u, i), r)).value
+            f1_sat.append(f1.item())
+            if epoch > self.epoch_threshold:
+                train_sat = self.sat_agg(f1, f3) if not self.f2 else self.sat_agg(f1, f3, f4)
+            else:
+                train_sat = f1
+            train_sat_agg += train_sat.item()
+            loss = 1. - train_sat
+            loss.backward()
+            self.optimizer.step()
+            train_loss += loss.item()
+        return train_loss / len(train_loader), {"training_overall_sat": train_sat_agg / len(train_loader),
+                                                "f1_sat": np.mean(f1_sat),
+                                                "f2_sat": np.mean(f3_sat) if f3_sat else -1.} if not self.f2 else \
+            {"training_overall_sat": train_sat_agg / len(train_loader),
+             "f1_sat": np.mean(f1_sat),
+             "f2_sat": np.mean(f3_sat) if f3_sat else -1.,
+             "f3_sat": np.mean(f4_sat) if f4_sat else -1.}
 
 
 class LTNTrainerMFGenres(MFTrainer):

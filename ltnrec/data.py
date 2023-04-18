@@ -8,6 +8,7 @@ from scipy.sparse import csr_matrix
 from ltnrec.utils import set_seed
 from sklearn.model_selection import train_test_split as train_test_split_sklearn
 import torch
+import math
 
 
 # todo ci sono 457 film matchati tra i due dataset per i quali pero' non ci sono ratings su mindreader, quindi e' un
@@ -409,10 +410,10 @@ class DataManager:
         item_mapping_file.to_csv(os.path.join(self.data_path, "mindreader/processed/item_mapping.csv"), index=False)
 
     def get_mr_200k_dataset(self, seed, binary_ratings=True, genre_threshold=None, k_filter_genre=None,
-                            k_filter_movie=None,
+                            k_filter_movie=None, val_mode_genres="rating-prediction",
                             genre_val_size=0.2, val_mode="auc", genre_user_level_split=False, movie_val_size=None,
                             movie_test_size=None, movie_user_level_split=False, n_neg=None, true_neg_rank=False,
-                            implicit_feedback=False):
+                            implicit_feedback=False, remove_top_genres=False, remove_top_movies=False):
         """
         It returns the MindReader-200k dataset ready for learning. The dataset is subdivided as follows:
         1. genre folds: a training set and validation set for learning the genre preferences of the users;
@@ -449,6 +450,8 @@ class DataManager:
         assert val_mode in ["1+random", "auc", "rating-prediction"], "The selected validation mode is not available"
         if implicit_feedback and val_mode == "rating-prediction":
             raise ValueError("You cannot select implicit feedback and rating prediction as validation mode.")
+        assert val_mode_genres in ["rating-prediction", "auc"], "The selected validation mode for genres is " \
+                                                                "not available."
         # get MindReader entities
         mr_entities = pd.read_csv(os.path.join(self.data_path, "mindreader-200k/entities.csv"))
         mr_entities_dict = mr_entities.to_dict("records")
@@ -528,6 +531,15 @@ class DataManager:
         n_genres = genre_ratings["uri"].nunique()
         n_items = movie_ratings["uri"].nunique()
 
+        # get most popular movies indexes to remove the top 2% popular movies from the test set. This should help in
+        # selecting models which are good in non trivial recommendations
+        top_2_pop_movies = list(movie_ratings.groupby(["uri"]).size().reset_index(
+            name='counts').sort_values(by=["counts"], ascending=False)["uri"])[:math.ceil((n_items * 2) / 100)]
+        # get most popular genre indexes to remove the top 2% popular genres from the validation set. This should help
+        # in selecting models which are good at predicting genre preferences for non-trivial genres
+        top_2_pop_genres = list(genre_ratings.groupby(["uri"]).size().reset_index(
+            name='counts').sort_values(by=["counts"], ascending=False)["uri"])[:math.ceil((n_genres * 2) / 100)]
+
         # compute user-item sparse matrix
         u_i_matrix = csr_matrix((np.ones(len(movie_ratings)), (movie_ratings["userId"], movie_ratings["uri"])),
                                 shape=(n_users, n_items))
@@ -560,25 +572,30 @@ class DataManager:
                 return train_test_split_sklearn(ratings, random_state=seed, stratify=ratings["sentiment"],
                                                 test_size=frac)
 
-        def create_folds_for_auc_computation(item_ratings):
+        def create_folds_for_auc_computation(item_ratings, top_pop_items=None):
             """
             It randomly samples one positive and one negative rating for each user. These are used as validation
             ratings to compute AUC metric.
 
             :param item_ratings: dataset of ratings from which the interactions have to be sampled for creating the
             validation or test set
+            :param top_pop_items: list of top 2% popular item indexes. If it is not None, the validation/test
+            interactions will be sampled in such a way to not include items in this list in the validation/test set
             :return: a dataframe containing the remaining ratings (training set) and a np array of
             (user, pos_item, neg_item) triples for computing AUC
             """
-            # todo questa funzione e' un piccolo collo di bottiglia
             # group by userId
             users = item_ratings.groupby(by=["userId"])
             auc_triples = []
             for user, user_ratings in users:
                 # check if the user has at least one positive rating and one negative rating
                 pos_ratings = user_ratings[user_ratings["sentiment"] == 1]
+                if top_pop_items is not None:
+                    pos_ratings = pos_ratings[~pos_ratings["uri"].isin(top_pop_items)]
                 if not implicit_feedback:
                     neg_ratings = user_ratings[user_ratings["sentiment"] != 1]
+                    if top_pop_items:
+                        neg_ratings = neg_ratings[~neg_ratings["uri"].isin(top_pop_items)]
                     if len(pos_ratings) > 1 and len(neg_ratings) > 1:
                         # sample one positive and one negative rating for this user
                         pos_int = pos_ratings.sample(random_state=seed)
@@ -644,7 +661,13 @@ class DataManager:
             return item_ratings, np.array(val_fold)
 
         # create train and validation set for genre preferences
-        g_train_set, g_val_set = train_test_split(genre_ratings, frac=genre_val_size, user_level=genre_user_level_split)
+        if val_mode_genres == "rating-prediction":
+            g_train_set, g_val_set = train_test_split(genre_ratings, frac=genre_val_size,
+                                                      user_level=genre_user_level_split)
+        else:
+            g_train_set, g_val_set = create_folds_for_auc_computation(genre_ratings,
+                                                                      top_2_pop_genres if remove_top_genres else None)
+
         # create train, validation and test set for movie preferences according to the selected task
         val_examples, test_examples = None, None
         if val_mode == "rating-prediction":
@@ -662,8 +685,10 @@ class DataManager:
             train_set, test_examples = create_fold_for_ranking_computation(movie_ratings)
             train_set_small, val_examples = create_fold_for_ranking_computation(train_set)
         elif val_mode == "auc":
-            train_set, test_examples = create_folds_for_auc_computation(movie_ratings)
-            train_set_small, val_examples = create_folds_for_auc_computation(train_set)
+            train_set, test_examples = create_folds_for_auc_computation(movie_ratings,
+                                                                        top_2_pop_movies if remove_top_movies else None)
+            train_set_small, val_examples = create_folds_for_auc_computation(train_set,
+                                                                             top_2_pop_movies if remove_top_movies else None)
 
         # create numpy arrays of user-item ratings with interaction matrices
         def create_fold(fold, n_items):
@@ -686,8 +711,10 @@ class DataManager:
                     "rating_matrix": csr_matrix((np.array([rating["sentiment"] for rating in fold.to_dict("records")]),
                                                  (list(fold["userId"]), list(fold["uri"]))), shape=(n_users, n_items))}
 
-        genre_folds = {"train_set": create_fold(g_train_set, n_genres),
-                       "val_set": create_fold(g_val_set, n_genres)}
+        genre_folds = {"all_ratings_df": genre_ratings,
+                       "train_set": create_fold(g_train_set, n_genres),
+                       "val_set": create_fold(g_val_set, n_genres)
+                       if val_mode_genres == "rating-prediction" else g_val_set}
 
         movie_folds = {"entire_dataset": u_i_matrix,
                        "train_set": create_fold(train_set, n_items),
@@ -710,7 +737,13 @@ class DataManager:
                                          (list(mr_genre_triples["head_uri"]),
                                           list(mr_genre_triples["tail_uri"]))), shape=(n_items, n_genres))
 
-        return n_users, n_genres, n_items, genre_folds, movie_folds, torch.tensor(item_genres_matrix.toarray())
+        return {"n_users": n_users, "n_genres": n_genres, "n_items": n_items,
+                "genre_ratings": genre_folds["all_ratings_df"],
+                "g_tr": genre_folds["train_set"], "g_val": genre_folds["val_set"],
+                "u_i_matrix": movie_folds["entire_dataset"],
+                "i_tr": movie_folds["train_set"], "i_tr_small": movie_folds["train_set_small"],
+                "i_val": movie_folds["val_set"], "i_test": movie_folds["test_set"],
+                "i_folds": movie_folds, "i_g_matrix": torch.tensor(item_genres_matrix.toarray())}
 
     def get_mr_100k_genre_ratings(self):
         # get MindReader-100k entities
